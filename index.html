@@ -154,8 +154,8 @@ function doGet(e) {
             <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
                 <h2 class="text-xl font-bold text-gray-800 mb-4">📥 รับของเข้าสต็อค</h2>
                 <form onsubmit="receiveItem(event)" class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="md:col-span-2">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">🔍 แสกน/ใส่ Serial Number (หลายตัว)</label>
                             <textarea id="receive-sn" placeholder="แสกนหรือพิมพ์ SN (แต่ละบรรทัดคือ SN หนึ่งตัว)&#10;เช่น:&#10;SN001&#10;SN002&#10;SN003" rows="4"
                                    class="scanner-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"></textarea>
@@ -168,12 +168,6 @@ function doGet(e) {
                                 <option value="กล้อง CCTV">กล้อง CCTV</option>
                                 <option value="SIM">SIM</option>
                             </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">📦 จำนวน</label>
-                            <input type="number" id="receive-quantity" value="1" min="1"
-                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                         </div>
                     </div>
                     <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 px-6 rounded-lg font-medium transition-colors">
@@ -188,8 +182,8 @@ function doGet(e) {
             <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
                 <h2 class="text-xl font-bold text-gray-800 mb-4">📤 เบิกจ่ายสินค้า</h2>
                 <form onsubmit="issueItem(event)" class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="md:col-span-2">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">🔍 แสกน/ใส่ Serial Number (หลายตัว)</label>
                             <textarea id="issue-sn" placeholder="แสกนหรือพิมพ์ SN (แต่ละบรรทัดคือ SN หนึ่งตัว)&#10;เช่น:&#10;SN001&#10;SN002&#10;SN003" rows="4"
                                    class="scanner-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-lg"></textarea>
@@ -198,12 +192,6 @@ function doGet(e) {
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">👨‍🔧 ชื่อช่าง</label>
                             <input type="text" id="issue-technician" placeholder="ชื่อช่างที่เบิก" 
-                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">📦 จำนวนที่เบิก</label>
-                            <input type="number" id="issue-quantity" value="1" min="1"
                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
                         </div>
                     </div>
@@ -317,7 +305,7 @@ function doGet(e) {
             const snInput = document.getElementById('receive-sn').value.trim();
             const product = document.getElementById('receive-product').value;
             const price = 0; // ไม่เก็บข้อมูลราคา
-            const quantity = parseInt(document.getElementById('receive-quantity').value) || 1;
+            const quantity = 1;
             const note = '';
             
             if (!snInput || !product) {
@@ -390,7 +378,6 @@ function doGet(e) {
             // Clear form
             document.getElementById('receive-sn').value = '';
             document.getElementById('receive-product').value = '';
-            document.getElementById('receive-quantity').value = '1';
             
             updateOverview();
             
@@ -404,7 +391,7 @@ function doGet(e) {
             
             const snInput = document.getElementById('issue-sn').value.trim();
             const technician = document.getElementById('issue-technician').value.trim();
-            const quantity = parseInt(document.getElementById('issue-quantity').value) || 1;
+            const quantity = 1;
             
             if (!snInput || !technician) {
                 showMessage('กรุณากรอก Serial Number และชื่อช่าง', 'error');
@@ -490,7 +477,6 @@ function doGet(e) {
             // Clear form
             document.getElementById('issue-sn').value = '';
             document.getElementById('issue-technician').value = '';
-            document.getElementById('issue-quantity').value = '1';
             
             updateOverview();
             
@@ -744,5 +730,5 @@ function doGet(e) {
             setTimeout(() => document.getElementById('issue-sn').focus(), 100);
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98812302e0184b9b',t:'MTc1OTM3NTk5MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98813e75f38e2603',t:'MTc1OTM3NzExNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
