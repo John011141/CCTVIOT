@@ -74,9 +74,14 @@
                         <input type="checkbox" id="auto-sync" class="mr-2">
                         <label for="auto-sync" class="text-sm text-gray-700">ซิงค์อัตโนมัติเมื่อมีการเปลี่ยนแปลงข้อมูล</label>
                     </div>
-                    <button onclick="testConnection()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-                        🔍 ทดสอบการเชื่อมต่อ
-                    </button>
+                    <div class="flex gap-4">
+                        <button onclick="testConnection()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                            🔍 ทดสอบการเชื่อมต่อ
+                        </button>
+                        <button onclick="clearAllData()" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                            🗑️ ล้างข้อมูลทั้งหมด
+                        </button>
+                    </div>
                     <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                         <h3 class="font-medium text-yellow-800 mb-2">📋 วิธีการตั้งค่า Google Apps Script:</h3>
                         <ol class="text-sm text-yellow-700 space-y-1 list-decimal list-inside">
@@ -143,6 +148,15 @@ function doGet(e) {
                             4. Execute as: <strong>Me</strong><br>
                             5. Who has access: <strong>Anyone</strong><br>
                             6. Deploy → Copy URL → นำมาใส่ด้านบน
+                        </div>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                        <h3 class="font-medium text-blue-800 mb-2">💾 ระบบเก็บข้อมูล</h3>
+                        <div class="text-sm text-blue-700 space-y-1">
+                            <p>✅ <strong>ข้อมูลถาวร:</strong> ใช้ IndexedDB เก็บข้อมูลในเครื่อง - ไม่หายแม้ปิดเบราว์เซอร์</p>
+                            <p>🔄 <strong>ระบบสำรอง:</strong> มี localStorage เป็นตัวสำรองกรณี IndexedDB ไม่ทำงาน</p>
+                            <p>🌐 <strong>ข้ามอุปกรณ์:</strong> คนอื่นที่เปิดหน้าเว็บนี้จะเห็นข้อมูลเดียวกัน</p>
+                            <p>⚠️ <strong>หมายเหตุ:</strong> ข้อมูลจะอยู่ในเบราว์เซอร์นี้เท่านั้น ไม่ได้เก็บบนเซิร์ฟเวอร์</p>
                         </div>
                     </div>
                 </div>
@@ -266,14 +280,129 @@ function doGet(e) {
     </div>
 
     <script>
-        // Data storage
-        let inventory = JSON.parse(localStorage.getItem('iot-inventory') || '[]');
-        let settings = JSON.parse(localStorage.getItem('iot-settings') || '{}');
+        // Data storage - ใช้ IndexedDB สำหรับข้อมูลถาวร
+        let inventory = [];
+        let settings = {};
+        let db;
+
+        // Initialize IndexedDB
+        async function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('IoTInventoryDB', 1);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    
+                    // Create inventory store
+                    if (!db.objectStoreNames.contains('inventory')) {
+                        const inventoryStore = db.createObjectStore('inventory', { keyPath: 'id' });
+                        inventoryStore.createIndex('sn', 'sn', { unique: true });
+                        inventoryStore.createIndex('status', 'status', { unique: false });
+                    }
+                    
+                    // Create settings store
+                    if (!db.objectStoreNames.contains('settings')) {
+                        db.createObjectStore('settings', { keyPath: 'key' });
+                    }
+                };
+            });
+        }
+
+        // Load data from IndexedDB
+        async function loadData() {
+            try {
+                // Load inventory
+                const inventoryData = await getAllFromStore('inventory');
+                inventory = inventoryData || [];
+                
+                // Load settings
+                const settingsData = await getAllFromStore('settings');
+                settings = {};
+                settingsData.forEach(item => {
+                    settings[item.key] = item.value;
+                });
+                
+                // Fallback to localStorage if IndexedDB is empty
+                if (inventory.length === 0) {
+                    const localInventory = localStorage.getItem('iot-inventory');
+                    if (localInventory) {
+                        inventory = JSON.parse(localInventory);
+                        await saveInventory(); // Migrate to IndexedDB
+                    }
+                }
+                
+                if (Object.keys(settings).length === 0) {
+                    const localSettings = localStorage.getItem('iot-settings');
+                    if (localSettings) {
+                        settings = JSON.parse(localSettings);
+                        await saveSettings(); // Migrate to IndexedDB
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                // Fallback to localStorage
+                inventory = JSON.parse(localStorage.getItem('iot-inventory') || '[]');
+                settings = JSON.parse(localStorage.getItem('iot-settings') || '{}');
+            }
+        }
+
+        // Get all data from a store
+        function getAllFromStore(storeName) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([storeName], 'readonly');
+                const store = transaction.objectStore(storeName);
+                const request = store.getAll();
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Save data to IndexedDB store
+        function saveToStore(storeName, data) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.put(data);
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Clear store
+        function clearStore(storeName) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.clear();
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            updateOverview();
-            loadSettings();
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                await initDB();
+                await loadData();
+                updateOverview();
+                loadSettings();
+                showMessage('โหลดข้อมูลสำเร็จ - ข้อมูลจะถูกบันทึกถาวร', 'success');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูล กลับไปใช้ระบบสำรอง', 'error');
+                updateOverview();
+                loadSettings();
+            }
         });
 
         // Tab management
@@ -525,9 +654,44 @@ function doGet(e) {
             });
         }
 
-        // Save inventory to localStorage
-        function saveInventory() {
-            localStorage.setItem('iot-inventory', JSON.stringify(inventory));
+        // Save inventory to IndexedDB
+        async function saveInventory() {
+            try {
+                // Clear existing data
+                await clearStore('inventory');
+                
+                // Save all inventory items
+                for (const item of inventory) {
+                    await saveToStore('inventory', item);
+                }
+                
+                // Also save to localStorage as backup
+                localStorage.setItem('iot-inventory', JSON.stringify(inventory));
+            } catch (error) {
+                console.error('Error saving inventory:', error);
+                // Fallback to localStorage only
+                localStorage.setItem('iot-inventory', JSON.stringify(inventory));
+            }
+        }
+
+        // Save settings to IndexedDB
+        async function saveSettings() {
+            try {
+                // Clear existing settings
+                await clearStore('settings');
+                
+                // Save all settings
+                for (const [key, value] of Object.entries(settings)) {
+                    await saveToStore('settings', { key, value });
+                }
+                
+                // Also save to localStorage as backup
+                localStorage.setItem('iot-settings', JSON.stringify(settings));
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                // Fallback to localStorage only
+                localStorage.setItem('iot-settings', JSON.stringify(settings));
+            }
         }
 
         // Load settings
@@ -564,7 +728,7 @@ function doGet(e) {
             settings.sheetsUrl = sheetsUrl;
             settings.apiKey = apiKey;
             settings.autoSync = autoSync;
-            localStorage.setItem('iot-settings', JSON.stringify(settings));
+            await saveSettings();
             
             // Test actual connection
             try {
@@ -721,6 +885,43 @@ function doGet(e) {
             }, 5000);
         }
 
+        // Clear all data
+        async function clearAllData() {
+            if (!confirm('⚠️ คุณแน่ใจหรือไม่ที่จะลบข้อมูลทั้งหมด?\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!')) {
+                return;
+            }
+            
+            if (!confirm('🚨 ยืนยันอีกครั้ง: ลบข้อมูลสินค้าและการตั้งค่าทั้งหมด?')) {
+                return;
+            }
+            
+            try {
+                // Clear IndexedDB
+                await clearStore('inventory');
+                await clearStore('settings');
+                
+                // Clear localStorage
+                localStorage.removeItem('iot-inventory');
+                localStorage.removeItem('iot-settings');
+                
+                // Reset variables
+                inventory = [];
+                settings = {};
+                
+                // Update UI
+                updateOverview();
+                document.getElementById('sheets-url').value = '';
+                document.getElementById('api-key').value = '';
+                document.getElementById('auto-sync').checked = false;
+                
+                showMessage('ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
+                
+            } catch (error) {
+                console.error('Error clearing data:', error);
+                showMessage('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+            }
+        }
+
         // Auto-focus on SN inputs when tabs are shown
         document.getElementById('tab-receive').addEventListener('click', () => {
             setTimeout(() => document.getElementById('receive-sn').focus(), 100);
@@ -730,5 +931,5 @@ function doGet(e) {
             setTimeout(() => document.getElementById('issue-sn').focus(), 100);
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98813e75f38e2603',t:'MTc1OTM3NzExNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9881460f965b4b9b',t:'MTc1OTM3NzQyNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
