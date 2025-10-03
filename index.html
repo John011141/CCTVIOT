@@ -428,85 +428,83 @@ function doGet(e) {
             });
         }
 
-        // Cloud sync functions - ใช้ระบบแชร์ข้อมูลจริงผ่าน BroadcastChannel และSharedArrayBuffer
-        let broadcastChannel;
-        let isUpdatingFromBroadcast = false;
+        // Cloud sync functions - ใช้ระบบแชร์ข้อมูลจริงผ่าน localStorage และ storage events
+        let isUpdatingFromSync = false;
+        let syncCheckInterval;
         
-        // Initialize broadcast channel for real-time sync
-        function initBroadcastChannel() {
-            try {
-                broadcastChannel = new BroadcastChannel('iot-inventory-sync');
-                broadcastChannel.addEventListener('message', handleBroadcastMessage);
-                console.log('BroadcastChannel initialized for real-time sync');
-            } catch (error) {
-                console.error('BroadcastChannel not supported:', error);
-                // Fallback to storage events
-                window.addEventListener('storage', handleStorageChange);
-            }
+        // Initialize sync system
+        function initSyncSystem() {
+            // Listen for storage changes from other tabs/windows
+            window.addEventListener('storage', handleStorageChange);
+            
+            // Check for updates every 2 seconds
+            syncCheckInterval = setInterval(checkForUpdates, 2000);
+            
+            console.log('Real-time sync system initialized');
         }
         
-        // Handle broadcast messages from other tabs/windows
-        async function handleBroadcastMessage(event) {
-            if (isUpdatingFromBroadcast) return; // Prevent infinite loops
+        // Check for updates from other tabs/windows
+        async function checkForUpdates() {
+            if (isUpdatingFromSync) return;
             
-            const { type, data, timestamp, senderId } = event.data;
-            
-            // Don't process our own messages
-            if (senderId === getClientId()) return;
-            
-            console.log('Received broadcast:', type, timestamp);
-            
-            if (type === 'inventory-update' && timestamp > lastSyncTime) {
-                isUpdatingFromBroadcast = true;
+            try {
+                const sharedDataStr = localStorage.getItem('iot-shared-data');
+                const sharedTimestamp = parseInt(localStorage.getItem('iot-shared-timestamp') || '0');
                 
-                try {
-                    inventory = data.inventory || [];
-                    settings = data.settings || {};
-                    lastSyncTime = timestamp;
+                if (sharedDataStr && sharedTimestamp > lastSyncTime) {
+                    isUpdatingFromSync = true;
+                    
+                    const sharedData = JSON.parse(sharedDataStr);
+                    inventory = sharedData.inventory || [];
+                    settings = sharedData.settings || {};
+                    lastSyncTime = sharedTimestamp;
                     
                     // Update UI
                     updateOverview();
                     loadSettings();
                     
-                    // Save to local storage
-                    await saveToLocalStorage();
-                    
-                    showMessage('🔄 อัปเดตข้อมูลจากผู้ใช้คนอื่นแล้ว', 'info');
+                    console.log('Updated from shared data:', inventory.length, 'items');
                     updateSyncStatus('อัปเดตข้อมูลสำเร็จ ✅');
                     
-                } catch (error) {
-                    console.error('Error handling broadcast:', error);
-                } finally {
-                    isUpdatingFromBroadcast = false;
+                    isUpdatingFromSync = false;
                 }
+            } catch (error) {
+                console.error('Error checking for updates:', error);
+                isUpdatingFromSync = false;
             }
         }
         
-        // Handle storage events (fallback for older browsers)
+        // Handle storage events from other tabs/windows
         async function handleStorageChange(event) {
-            if (isUpdatingFromBroadcast) return;
-            if (event.key !== 'iot-shared-data') return;
+            if (isUpdatingFromSync) return;
             
-            try {
-                const newData = JSON.parse(event.newValue || '{}');
-                if (newData.timestamp > lastSyncTime) {
-                    isUpdatingFromBroadcast = true;
+            // Handle both shared data and timestamp changes
+            if (event.key === 'iot-shared-data' || event.key === 'iot-shared-timestamp') {
+                try {
+                    const sharedDataStr = localStorage.getItem('iot-shared-data');
+                    const sharedTimestamp = parseInt(localStorage.getItem('iot-shared-timestamp') || '0');
                     
-                    inventory = newData.inventory || [];
-                    settings = newData.settings || {};
-                    lastSyncTime = newData.timestamp;
-                    
-                    updateOverview();
-                    loadSettings();
-                    
-                    showMessage('🔄 อัปเดตข้อมูลจากผู้ใช้คนอื่นแล้ว', 'info');
-                    updateSyncStatus('อัปเดตข้อมูลสำเร็จ ✅');
-                    
-                    isUpdatingFromBroadcast = false;
+                    if (sharedDataStr && sharedTimestamp > lastSyncTime) {
+                        isUpdatingFromSync = true;
+                        
+                        const sharedData = JSON.parse(sharedDataStr);
+                        inventory = sharedData.inventory || [];
+                        settings = sharedData.settings || {};
+                        lastSyncTime = sharedTimestamp;
+                        
+                        // Update UI immediately
+                        updateOverview();
+                        loadSettings();
+                        
+                        console.log('Storage event - updated data:', inventory.length, 'items');
+                        updateSyncStatus('อัปเดตข้อมูลสำเร็จ ✅');
+                        
+                        isUpdatingFromSync = false;
+                    }
+                } catch (error) {
+                    console.error('Storage event error:', error);
+                    isUpdatingFromSync = false;
                 }
-            } catch (error) {
-                console.error('Storage event error:', error);
-                isUpdatingFromBroadcast = false;
             }
         }
         
@@ -520,39 +518,26 @@ function doGet(e) {
             return clientId;
         }
         
-        // Broadcast data to other tabs/windows
-        function broadcastUpdate() {
-            if (isUpdatingFromBroadcast) return;
+        // Share data to other tabs/windows
+        function shareUpdate() {
+            if (isUpdatingFromSync) return;
             
-            const updateData = {
-                type: 'inventory-update',
-                data: {
-                    inventory: inventory,
-                    settings: settings
-                },
-                timestamp: Date.now(),
-                senderId: getClientId()
+            const timestamp = Date.now();
+            const sharedData = {
+                inventory: inventory,
+                settings: settings
             };
             
             // Update timestamp
-            lastSyncTime = updateData.timestamp;
+            lastSyncTime = timestamp;
             
-            // Broadcast via BroadcastChannel
-            if (broadcastChannel) {
-                try {
-                    broadcastChannel.postMessage(updateData);
-                    console.log('Broadcasted update via BroadcastChannel');
-                } catch (error) {
-                    console.error('Broadcast error:', error);
-                }
-            }
-            
-            // Also save to localStorage for storage event fallback
+            // Save to localStorage for sharing
             try {
-                localStorage.setItem('iot-shared-data', JSON.stringify(updateData.data));
-                localStorage.setItem('iot-shared-timestamp', updateData.timestamp.toString());
+                localStorage.setItem('iot-shared-data', JSON.stringify(sharedData));
+                localStorage.setItem('iot-shared-timestamp', timestamp.toString());
+                console.log('Shared update to localStorage:', inventory.length, 'items');
             } catch (error) {
-                console.error('localStorage sync error:', error);
+                console.error('localStorage share error:', error);
             }
         }
         
@@ -603,7 +588,7 @@ function doGet(e) {
         // Sync functions for compatibility
         async function syncToCloud() {
             if (!cloudSyncEnabled) return;
-            broadcastUpdate();
+            shareUpdate();
         }
         
         async function syncFromCloud() {
@@ -669,8 +654,8 @@ function doGet(e) {
             try {
                 await initDB();
                 
-                // Initialize broadcast channel for real-time sync
-                initBroadcastChannel();
+                // Initialize sync system for real-time sharing
+                initSyncSystem();
                 
                 // Load shared data first
                 const hasSharedData = await loadSharedData();
@@ -681,8 +666,8 @@ function doGet(e) {
                 updateOverview();
                 loadSettings();
                 
-                // Broadcast current data to other tabs
-                broadcastUpdate();
+                // Share current data to other tabs
+                shareUpdate();
                 
                 showMessage('🌐 ระบบแชร์ข้อมูลเรียลไทม์พร้อมใช้งาน!', 'success');
                 updateSyncStatus('พร้อมใช้งาน - ซิงค์แบบเรียลไทม์ ✅');
@@ -945,7 +930,7 @@ function doGet(e) {
             });
         }
 
-        // Save inventory to IndexedDB and broadcast to other tabs
+        // Save inventory to IndexedDB and share to other tabs
         async function saveInventory() {
             try {
                 // Clear existing data
@@ -959,18 +944,18 @@ function doGet(e) {
                 // Also save to localStorage as backup
                 await saveToLocalStorage();
                 
-                // Broadcast to other tabs immediately
-                broadcastUpdate();
+                // Share to other tabs immediately
+                shareUpdate();
                 
             } catch (error) {
                 console.error('Error saving inventory:', error);
                 // Fallback to localStorage only
                 await saveToLocalStorage();
-                broadcastUpdate(); // Still try to broadcast
+                shareUpdate(); // Still try to share
             }
         }
 
-        // Save settings to IndexedDB and broadcast to other tabs
+        // Save settings to IndexedDB and share to other tabs
         async function saveSettings() {
             try {
                 // Clear existing settings
@@ -984,14 +969,14 @@ function doGet(e) {
                 // Also save to localStorage as backup
                 await saveToLocalStorage();
                 
-                // Broadcast to other tabs immediately
-                broadcastUpdate();
+                // Share to other tabs immediately
+                shareUpdate();
                 
             } catch (error) {
                 console.error('Error saving settings:', error);
                 // Fallback to localStorage only
                 await saveToLocalStorage();
-                broadcastUpdate(); // Still try to broadcast
+                shareUpdate(); // Still try to share
             }
         }
 
@@ -1235,8 +1220,8 @@ function doGet(e) {
                 document.getElementById('api-key').value = '';
                 document.getElementById('auto-sync').checked = false;
                 
-                // Broadcast empty data to other tabs
-                broadcastUpdate();
+                // Share empty data to other tabs
+                shareUpdate();
                 
                 showMessage('🗑️ ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
                 showMessage('📊 ข้อมูลถูกลบออกจากระบบแชร์แล้ว', 'info');
@@ -1279,8 +1264,8 @@ function doGet(e) {
                 document.getElementById('api-key').value = '';
                 document.getElementById('auto-sync').checked = false;
                 
-                // Broadcast empty data to other tabs
-                broadcastUpdate();
+                // Share empty data to other tabs
+                shareUpdate();
                 
                 showMessage('ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
                 
@@ -1321,5 +1306,5 @@ function doGet(e) {
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a6f4ce3cd4d99',t:'MTc1OTQ3MzQ4Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a8a4ef7674d99',t:'MTc1OTQ3NDU5My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
