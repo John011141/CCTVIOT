@@ -40,14 +40,14 @@
         <!-- Navigation Tabs -->
         <div class="bg-white rounded-xl shadow-lg mb-6">
             <div class="flex border-b">
-                <button onclick="showTab('receive')" id="tab-receive" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-blue-500 text-blue-600 bg-blue-50">
+                <button onclick="showTab('overview')" id="tab-overview" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-blue-500 text-blue-600 bg-blue-50">
+                    📊 ภาพรวม
+                </button>
+                <button onclick="showTab('receive')" id="tab-receive" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                     📥 รับของเข้า
                 </button>
                 <button onclick="showTab('issue')" id="tab-issue" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                     📤 เบิกจ่าย
-                </button>
-                <button onclick="showTab('overview')" id="tab-overview" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
-                    📊 ภาพรวม
                 </button>
                 <button onclick="showTab('settings')" id="tab-settings" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                     ⚙️ ตั้งค่า
@@ -168,8 +168,69 @@ function doGet(e) {
             </div>
         </div>
 
+        <!-- Overview Tab -->
+        <div id="overview-tab">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-blue-100">สินค้าทั้งหมด</p>
+                            <p class="text-3xl font-bold" id="total-items">0</p>
+                        </div>
+                        <div class="text-4xl">📦</div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-green-100">คงเหลือในสต็อค</p>
+                            <p class="text-3xl font-bold" id="stock-items">0</p>
+                        </div>
+                        <div class="text-4xl">✅</div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-orange-100">เบิกจ่ายแล้ว</p>
+                            <p class="text-3xl font-bold" id="issued-items">0</p>
+                        </div>
+                        <div class="text-4xl">📤</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-gray-800">📋 รายการสินค้าล่าสุด</h3>
+                    <div class="flex gap-2">
+                        <button onclick="exportToGoogleSheets()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            📊 ส่งไป Google Sheets
+                        </button>
+                        <button onclick="showDeleteConfirmModal()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            🗑️ ลบข้อมูลทั้งหมด
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-medium text-gray-700">SN</th>
+                                <th class="px-4 py-3 text-left font-medium text-gray-700">สินค้า</th>
+                                <th class="px-4 py-3 text-left font-medium text-gray-700">สถานะ</th>
+                                <th class="px-4 py-3 text-left font-medium text-gray-700">วันที่</th>
+                            </tr>
+                        </thead>
+                        <tbody id="items-table" class="divide-y divide-gray-200">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- Receive Tab -->
-        <div id="receive-tab">
+        <div id="receive-tab" class="hidden">
             <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
                 <h2 class="text-xl font-bold text-gray-800 mb-4">📥 รับของเข้าสต็อค</h2>
                 <form onsubmit="receiveItem(event)" class="space-y-4">
@@ -222,68 +283,7 @@ function doGet(e) {
             </div>
         </div>
 
-        <!-- Overview Tab -->
-        <div id="overview-tab" class="hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-blue-100">สินค้าทั้งหมด</p>
-                            <p class="text-3xl font-bold" id="total-items">0</p>
-                        </div>
-                        <div class="text-4xl">📦</div>
-                    </div>
-                </div>
-                <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-green-100">คงเหลือในสต็อค</p>
-                            <p class="text-3xl font-bold" id="stock-items">0</p>
-                        </div>
-                        <div class="text-4xl">✅</div>
-                    </div>
-                </div>
-                <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-orange-100">เบิกจ่ายแล้ว</p>
-                            <p class="text-3xl font-bold" id="issued-items">0</p>
-                        </div>
-                        <div class="text-4xl">📤</div>
-                    </div>
-                </div>
-            </div>
 
-
-
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-bold text-gray-800">📋 รายการสินค้าล่าสุด</h3>
-                    <div class="flex gap-2">
-                        <button onclick="exportToGoogleSheets()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                            📊 ส่งไป Google Sheets
-                        </button>
-                        <button onclick="showDeleteConfirmModal()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                            🗑️ ลบข้อมูลทั้งหมด
-                        </button>
-                    </div>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">SN</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">สินค้า</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">สถานะ</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">วันที่</th>
-                            </tr>
-                        </thead>
-                        <tbody id="items-table" class="divide-y divide-gray-200">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
 
         <!-- Success/Error Messages -->
         <div id="message-container" class="fixed top-4 right-4 z-50"></div>
@@ -1321,5 +1321,5 @@ function doGet(e) {
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a64a764294d99',t:'MTc1OTQ3MzA1MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a6f4ce3cd4d99',t:'MTc1OTQ3MzQ4Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
