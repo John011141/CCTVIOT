@@ -259,9 +259,14 @@ function doGet(e) {
             <div class="bg-white rounded-xl shadow-lg p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-xl font-bold text-gray-800">📋 รายการสินค้าล่าสุด</h3>
-                    <button onclick="exportToGoogleSheets()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                        📊 ส่งไป Google Sheets
-                    </button>
+                    <div class="flex gap-2">
+                        <button onclick="exportToGoogleSheets()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            📊 ส่งไป Google Sheets
+                        </button>
+                        <button onclick="showDeleteConfirmModal()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            🗑️ ลบข้อมูลทั้งหมด
+                        </button>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -282,6 +287,33 @@ function doGet(e) {
 
         <!-- Success/Error Messages -->
         <div id="message-container" class="fixed top-4 right-4 z-50"></div>
+        
+        <!-- Delete Confirmation Modal -->
+        <div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+            <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+                <div class="text-center mb-6">
+                    <div class="text-6xl mb-4">⚠️</div>
+                    <h3 class="text-xl font-bold text-red-600 mb-2">ยืนยันการลบข้อมูลทั้งหมด</h3>
+                    <p class="text-gray-600">การกระทำนี้จะลบข้อมูลสินค้าทั้งหมดและไม่สามารถย้อนกลับได้</p>
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">🔐 ใส่รหัสผ่านเพื่อยืนยัน</label>
+                    <input type="password" id="delete-password" placeholder="ใส่รหัสผ่าน" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-center text-lg">
+                    <p class="text-xs text-gray-500 mt-1">รหัสผ่านสำหรับการลบข้อมูล</p>
+                </div>
+                
+                <div class="flex gap-3">
+                    <button onclick="hideDeleteConfirmModal()" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 px-4 rounded-lg font-medium transition-colors">
+                        ❌ ยกเลิก
+                    </button>
+                    <button onclick="confirmDeleteAllData()" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-lg font-medium transition-colors">
+                        🗑️ ลบทั้งหมด
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1023,7 +1055,68 @@ function doGet(e) {
             }, 5000);
         }
 
-        // Clear all data
+        // Show delete confirmation modal
+        function showDeleteConfirmModal() {
+            document.getElementById('delete-modal').classList.remove('hidden');
+            document.getElementById('delete-password').value = '';
+            document.getElementById('delete-password').focus();
+        }
+        
+        // Hide delete confirmation modal
+        function hideDeleteConfirmModal() {
+            document.getElementById('delete-modal').classList.add('hidden');
+            document.getElementById('delete-password').value = '';
+        }
+        
+        // Confirm delete with password
+        async function confirmDeleteAllData() {
+            const password = document.getElementById('delete-password').value;
+            const correctPassword = 'John19195';
+            
+            if (password !== correctPassword) {
+                showMessage('🔐 รหัสผ่านไม่ถูกต้อง', 'error');
+                document.getElementById('delete-password').value = '';
+                document.getElementById('delete-password').focus();
+                return;
+            }
+            
+            hideDeleteConfirmModal();
+            
+            try {
+                // Clear IndexedDB
+                await clearStore('inventory');
+                await clearStore('settings');
+                
+                // Clear localStorage
+                localStorage.removeItem('iot-inventory');
+                localStorage.removeItem('iot-settings');
+                localStorage.removeItem('iot-cloud-data');
+                localStorage.removeItem('iot-cloud-sync-time');
+                
+                // Reset variables
+                inventory = [];
+                settings = {};
+                lastSyncTime = 0;
+                
+                // Update UI
+                updateOverview();
+                document.getElementById('sheets-url').value = '';
+                document.getElementById('api-key').value = '';
+                document.getElementById('auto-sync').checked = false;
+                
+                // Sync empty data to cloud
+                await syncToCloud();
+                
+                showMessage('🗑️ ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
+                showMessage('📊 ข้อมูลถูกลบออกจากระบบแชร์แล้ว', 'info');
+                
+            } catch (error) {
+                console.error('Error clearing data:', error);
+                showMessage('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+            }
+        }
+
+        // Clear all data (legacy function for settings page)
         async function clearAllData() {
             if (!confirm('⚠️ คุณแน่ใจหรือไม่ที่จะลบข้อมูลทั้งหมด?\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!')) {
                 return;
@@ -1041,16 +1134,22 @@ function doGet(e) {
                 // Clear localStorage
                 localStorage.removeItem('iot-inventory');
                 localStorage.removeItem('iot-settings');
+                localStorage.removeItem('iot-cloud-data');
+                localStorage.removeItem('iot-cloud-sync-time');
                 
                 // Reset variables
                 inventory = [];
                 settings = {};
+                lastSyncTime = 0;
                 
                 // Update UI
                 updateOverview();
                 document.getElementById('sheets-url').value = '';
                 document.getElementById('api-key').value = '';
                 document.getElementById('auto-sync').checked = false;
+                
+                // Sync empty data to cloud
+                await syncToCloud();
                 
                 showMessage('ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
                 
@@ -1068,6 +1167,28 @@ function doGet(e) {
         document.getElementById('tab-issue').addEventListener('click', () => {
             setTimeout(() => document.getElementById('issue-sn').focus(), 100);
         });
+        
+        // Handle Enter key in delete password field
+        document.addEventListener('DOMContentLoaded', function() {
+            const deletePasswordField = document.getElementById('delete-password');
+            if (deletePasswordField) {
+                deletePasswordField.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        confirmDeleteAllData();
+                    }
+                });
+            }
+            
+            // Close modal when clicking outside
+            const deleteModal = document.getElementById('delete-modal');
+            if (deleteModal) {
+                deleteModal.addEventListener('click', function(e) {
+                    if (e.target === deleteModal) {
+                        hideDeleteConfirmModal();
+                    }
+                });
+            }
+        });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a3c7af4284b9b',t:'MTc1OTQ3MTQwNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a550b62f94b9b',t:'MTc1OTQ3MjQxMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
