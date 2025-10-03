@@ -27,6 +27,13 @@
             50% { background-color: rgb(22, 163, 74); }
             100% { background-color: rgb(34, 197, 94); }
         }
+        .deployment-highlight {
+            border: 2px solid #ef4444; /* Red border */
+            background-color: #fee2e2; /* Red background light */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
@@ -78,18 +85,20 @@
                         <button onclick="testConnection()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
                             🔍 ทดสอบการเชื่อมต่อ
                         </button>
-                        <button onclick="clearAllData()" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                        <button onclick="showDeleteConfirmModal()" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
                             🗑️ ล้างข้อมูลทั้งหมด
                         </button>
                     </div>
+                    
+                    <!-- UPDATED DEPLOYMENT INSTRUCTIONS WITH HIGHLIGHT -->
                     <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                         <h3 class="font-medium text-yellow-800 mb-2">📋 วิธีการตั้งค่า Google Apps Script:</h3>
                         <ol class="text-sm text-yellow-700 space-y-1 list-decimal list-inside">
                             <li>สร้าง Google Sheets ใหม่</li>
                             <li>ไปที่ Extensions → Apps Script</li>
                             <li>วาง Code ด้านล่างใน Apps Script</li>
-                            <li>Deploy as Web App → Execute as: Me → Who has access: Anyone</li>
-                            <li>คัดลอก URL ที่ได้มาใส่ด้านบน</li>
+                            <li>**สำคัญมาก:** Deploy เป็น Web App โดยตั้งค่า "Execute as: Me" และ "Who has access: Anyone"</li>
+                            <li>**สำคัญมาก:** คัดลอก URL ที่ได้จากการ Deploy แล้วนำมาใส่ด้านบน</li>
                         </ol>
                         <div class="mt-3 p-3 bg-gray-100 rounded text-xs overflow-x-auto">
                             <strong>Google Apps Script Code สำหรับแชร์ข้อมูลข้ามเครื่อง (คัดลอกทั้งหมด):</strong><br>
@@ -192,14 +201,18 @@ function doGet(e) {
   }
 }</code></pre>
                         </div>
-                        <div class="mt-3 p-3 bg-blue-50 rounded text-xs">
-                            <strong>⚠️ สำคัญ: ขั้นตอนการ Deploy</strong><br>
-                            1. วาง Code ด้านบน → Save<br>
-                            2. คลิก Deploy → New deployment<br>
-                            3. Type: Web app<br>
-                            4. Execute as: <strong>Me</strong><br>
-                            5. Who has access: <strong>Anyone</strong><br>
-                            6. Deploy → Copy URL → นำมาใส่ด้านบน
+                        <div class="deployment-highlight">
+                            <h3 class="font-bold text-red-600 mb-2 text-lg">🚨 ขั้นตอนการ Deploy ที่ผิดพลาดบ่อย:</h3>
+                            <p class="text-sm text-red-700 space-y-1">
+                                1. วาง Code ทั้งหมด → Save<br>
+                                2. คลิก **Deploy** → **New deployment** (หรือ Manage deployment → Edit)<br>
+                                3. Type: **Web app**<br>
+                                4. Execute as: **Me** (ตัวฉัน)<br>
+                                5. Who has access: **Anyone** (ทุกคน)<br>
+                                6. **Deploy** → **คัดลอก URL** (Deployment ID) มาใส่ในช่องด้านบน
+                            </p>
+                            <p class="text-xs text-red-500 mt-2">**หากแก้ไขโค้ดต้องทำซ้ำตั้งแต่ข้อ 2 เพื่อให้ได้ URL ที่ใช้งานได้ครับ**</p>
+                            <p class="text-xs text-red-500 mt-2">**หากคุณรันจากเครื่อง (http://127.0.0.1) และติด CORS error ตอนนี้ได้ทำการปรับโค้ดฝั่ง Client ให้เป็น Simple Request แล้ว ซึ่งช่วยแก้ปัญหานี้ได้ครับ**</p>
                         </div>
                     </div>
                     <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
@@ -278,6 +291,16 @@ function doGet(e) {
                         </tbody>
                     </table>
                 </div>
+                <!-- Pagination Controls: เพิ่มส่วนนี้สำหรับการควบคุมการแบ่งหน้า -->
+                <div class="flex justify-center items-center mt-6 space-x-2" id="pagination-controls">
+                    <button onclick="changePage(-1)" id="prev-page-btn" class="px-4 py-2 border rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        < ย้อนกลับ
+                    </button>
+                    <span id="page-info" class="text-sm font-medium text-gray-600">หน้า 1 จาก 1</span>
+                    <button onclick="changePage(1)" id="next-page-btn" class="px-4 py-2 border rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        หน้าถัดไป >
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -351,7 +374,8 @@ function doGet(e) {
                 
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-2">🔐 ใส่รหัสผ่านเพื่อยืนยัน</label>
-                    <input type="password" id="delete-password" placeholder="ใส่รหัสผ่าน" 
+                    <!-- UPDATED PLACEHOLDER FOR CLARITY -->
+                    <input type="password" id="delete-password" placeholder="ใส่รหัสผ่าน John19195" 
                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-center text-lg">
                     <p class="text-xs text-gray-500 mt-1">รหัสผ่านสำหรับการลบข้อมูล</p>
                 </div>
@@ -375,6 +399,10 @@ function doGet(e) {
         let db;
         let cloudSyncEnabled = true;
         let lastSyncTime = 0;
+
+        // Pagination variables
+        let currentPage = 1;
+        const itemsPerPage = 20;
 
         // Initialize IndexedDB
         async function initDB() {
@@ -424,7 +452,8 @@ function doGet(e) {
                     const localInventory = localStorage.getItem('iot-inventory');
                     if (localInventory) {
                         inventory = JSON.parse(localInventory);
-                        await saveInventory(); // Migrate to IndexedDB
+                        // Save to IndexedDB for future use
+                        await Promise.all(inventory.map(item => saveToStore('inventory', item))); 
                     }
                 }
                 
@@ -432,7 +461,8 @@ function doGet(e) {
                     const localSettings = localStorage.getItem('iot-settings');
                     if (localSettings) {
                         settings = JSON.parse(localSettings);
-                        await saveSettings(); // Migrate to IndexedDB
+                        // Save to IndexedDB for future use
+                        await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] }))); 
                     }
                 }
                 
@@ -447,6 +477,7 @@ function doGet(e) {
         // Get all data from a store
         function getAllFromStore(storeName) {
             return new Promise((resolve, reject) => {
+                if (!db) return resolve([]);
                 const transaction = db.transaction([storeName], 'readonly');
                 const store = transaction.objectStore(storeName);
                 const request = store.getAll();
@@ -459,6 +490,7 @@ function doGet(e) {
         // Save data to IndexedDB store
         function saveToStore(storeName, data) {
             return new Promise((resolve, reject) => {
+                if (!db) return resolve();
                 const transaction = db.transaction([storeName], 'readwrite');
                 const store = transaction.objectStore(storeName);
                 const request = store.put(data);
@@ -471,6 +503,7 @@ function doGet(e) {
         // Clear store
         function clearStore(storeName) {
             return new Promise((resolve, reject) => {
+                if (!db) return resolve();
                 const transaction = db.transaction([storeName], 'readwrite');
                 const store = transaction.objectStore(storeName);
                 const request = store.clear();
@@ -493,6 +526,12 @@ function doGet(e) {
             // Load cloud sync URL from settings
             cloudSyncUrl = settings.sheetsUrl || '';
             
+            // Setup listener for settings change (e.g., cloud sync toggle)
+            document.getElementById('cloud-sync-toggle').addEventListener('change', saveSettings);
+            document.getElementById('sheets-url').addEventListener('change', saveSettings);
+            document.getElementById('api-key').addEventListener('change', saveSettings);
+            document.getElementById('auto-sync').addEventListener('change', saveSettings);
+
             console.log('Cloud sync system initialized');
         }
         
@@ -501,6 +540,8 @@ function doGet(e) {
             if (isUpdatingFromSync || !cloudSyncEnabled || !cloudSyncUrl) return;
             
             try {
+                updateSyncStatus('กำลังตรวจสอบ... 🔄');
+                
                 // Get data from cloud
                 const response = await fetch(cloudSyncUrl + '?action=getData&timestamp=' + Date.now(), {
                     method: 'GET',
@@ -516,6 +557,12 @@ function doGet(e) {
                         inventory = cloudData.data.inventory || [];
                         settings = { ...settings, ...cloudData.data.settings };
                         lastSyncTime = cloudData.timestamp;
+
+                        // Save new data to IndexedDB locally
+                        await clearStore('inventory');
+                        await Promise.all(inventory.map(item => saveToStore('inventory', item)));
+                        await clearStore('settings');
+                        await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] })));
                         
                         // Update UI
                         updateOverview();
@@ -525,46 +572,21 @@ function doGet(e) {
                         updateSyncStatus('อัปเดตจากคลาวด์สำเร็จ ✅');
                         
                         isUpdatingFromSync = false;
+                    } else {
+                         updateSyncStatus('สถานะ: พร้อมใช้งาน 🟢');
                     }
+                } else {
+                     updateSyncStatus('สถานะ: พร้อมใช้งาน 🟢');
                 }
             } catch (error) {
-                // Fallback to localStorage for same-device sync
-                await checkForLocalUpdates();
+                console.error('Cloud check error, reverting to local:', error);
+                updateSyncStatus('ซิงค์ท้องถิ่นเท่านั้น 📱', 'text-orange-700');
+                // Fallback is handled by general loadData/loadSharedData mechanism on startup
             }
         }
         
-        // Fallback: Check for updates from localStorage (same device only)
-        async function checkForLocalUpdates() {
-            if (isUpdatingFromSync) return;
-            
-            try {
-                const sharedDataStr = localStorage.getItem('iot-shared-data');
-                const sharedTimestamp = parseInt(localStorage.getItem('iot-shared-timestamp') || '0');
-                
-                if (sharedDataStr && sharedTimestamp > lastSyncTime) {
-                    isUpdatingFromSync = true;
-                    
-                    const sharedData = JSON.parse(sharedDataStr);
-                    inventory = sharedData.inventory || [];
-                    settings = sharedData.settings || {};
-                    lastSyncTime = sharedTimestamp;
-                    
-                    // Update UI
-                    updateOverview();
-                    loadSettings();
-                    
-                    console.log('Updated from localStorage:', inventory.length, 'items');
-                    updateSyncStatus('อัปเดตข้อมูลสำเร็จ ✅');
-                    
-                    isUpdatingFromSync = false;
-                }
-            } catch (error) {
-                console.error('Error checking local updates:', error);
-                isUpdatingFromSync = false;
-            }
-        }
         
-        // Generate unique client ID
+        // Generate unique client ID (Not strictly used for sync logic but good practice)
         function getClientId() {
             let clientId = localStorage.getItem('iot-client-id');
             if (!clientId) {
@@ -574,7 +596,7 @@ function doGet(e) {
             return clientId;
         }
         
-        // Share data to cloud and localStorage
+        // Share data to cloud and localStorage (Called after every successful CUD operation)
         async function shareUpdate() {
             if (isUpdatingFromSync) return;
             
@@ -589,7 +611,7 @@ function doGet(e) {
             // Update timestamp
             lastSyncTime = timestamp;
             
-            // Save to localStorage for same-device sync
+            // Save to localStorage as a fallback / immediate cross-tab check
             try {
                 localStorage.setItem('iot-shared-data', JSON.stringify(sharedData));
                 localStorage.setItem('iot-shared-timestamp', timestamp.toString());
@@ -600,12 +622,14 @@ function doGet(e) {
             // Save to cloud for cross-device sync
             if (cloudSyncEnabled && cloudSyncUrl) {
                 try {
+                    // Using no-cors here because Google Apps Script (GAS) Web App deployment defaults
+                    // prevent us from inspecting the JSON response directly from a POST if not configured carefully.
+                    // This is for fire-and-forget sync.
                     await fetch(cloudSyncUrl, {
                         method: 'POST',
-                        mode: 'no-cors',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        mode: 'no-cors', 
+                        // NOTE: Removed 'Content-Type: application/json' header to ensure a "Simple Request"
+                        // is made, bypassing the preflight OPTIONS check that fails with GAS on localhost.
                         body: JSON.stringify({
                             action: 'saveData',
                             data: sharedData,
@@ -617,90 +641,16 @@ function doGet(e) {
                     updateSyncStatus('ซิงค์ไปคลาวด์สำเร็จ ☁️');
                 } catch (error) {
                     console.error('Cloud share error:', error);
-                    updateSyncStatus('ซิงค์ท้องถิ่นเท่านั้น 📱');
+                    updateSyncStatus('ซิงค์ท้องถิ่นเท่านั้น 📱', 'text-orange-700');
                 }
             }
         }
         
-        // Save to localStorage only (without broadcasting)
-        async function saveToLocalStorage() {
-            try {
-                localStorage.setItem('iot-inventory', JSON.stringify(inventory));
-                localStorage.setItem('iot-settings', JSON.stringify(settings));
-            } catch (error) {
-                console.error('localStorage save error:', error);
-            }
-        }
-        
-        // Load shared data from cloud first, then localStorage
+        // Load shared data from cloud first, then IndexedDB
         async function loadSharedData() {
-            try {
-                // Try to load from cloud first
-                if (cloudSyncUrl) {
-                    try {
-                        const response = await fetch(cloudSyncUrl + '?action=getData&timestamp=' + Date.now(), {
-                            method: 'GET',
-                            mode: 'cors'
-                        });
-                        
-                        if (response.ok) {
-                            const cloudData = await response.json();
-                            
-                            if (cloudData.success && cloudData.data) {
-                                inventory = cloudData.data.inventory || [];
-                                settings = cloudData.data.settings || {};
-                                lastSyncTime = cloudData.timestamp || Date.now();
-                                console.log('Loaded data from cloud');
-                                return true;
-                            }
-                        }
-                    } catch (cloudError) {
-                        console.log('Cloud load failed, trying localStorage');
-                    }
-                }
-                
-                // Fallback to localStorage
-                const sharedDataStr = localStorage.getItem('iot-shared-data');
-                const sharedTimestamp = parseInt(localStorage.getItem('iot-shared-timestamp') || '0');
-                
-                if (sharedDataStr && sharedTimestamp > 0) {
-                    const sharedData = JSON.parse(sharedDataStr);
-                    inventory = sharedData.inventory || [];
-                    settings = sharedData.settings || {};
-                    lastSyncTime = sharedTimestamp;
-                    console.log('Loaded shared data from localStorage');
-                    return true;
-                }
-                
-                // Final fallback to individual storage
-                const inventoryStr = localStorage.getItem('iot-inventory');
-                const settingsStr = localStorage.getItem('iot-settings');
-                
-                if (inventoryStr) {
-                    inventory = JSON.parse(inventoryStr);
-                }
-                if (settingsStr) {
-                    settings = JSON.parse(settingsStr);
-                }
-                
-                return false;
-            } catch (error) {
-                console.error('Error loading shared data:', error);
-                return false;
-            }
-        }
-        
-        // Sync functions for compatibility
-        async function syncToCloud() {
-            if (!cloudSyncEnabled) return;
-            await shareUpdate();
-        }
-        
-        async function syncFromCloud() {
-            if (!cloudSyncEnabled) return false;
-            
-            try {
-                if (cloudSyncUrl) {
+            // Priority 1: Cloud
+            if (cloudSyncUrl) {
+                try {
                     const response = await fetch(cloudSyncUrl + '?action=getData&timestamp=' + Date.now(), {
                         method: 'GET',
                         mode: 'cors'
@@ -709,754 +659,543 @@ function doGet(e) {
                     if (response.ok) {
                         const cloudData = await response.json();
                         
-                        if (cloudData.success && cloudData.data && cloudData.timestamp > lastSyncTime) {
+                        if (cloudData.success && cloudData.data) {
                             inventory = cloudData.data.inventory || [];
-                            settings = { ...settings, ...cloudData.data.settings };
+                            settings = cloudData.data.settings || {};
                             lastSyncTime = cloudData.timestamp;
-                            return true;
+                            
+                            // Save new data to IndexedDB locally
+                            await clearStore('inventory');
+                            await Promise.all(inventory.map(item => saveToStore('inventory', item)));
+                            await clearStore('settings');
+                            await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] })));
+
+                            updateOverview();
+                            loadSettings();
+                            
+                            console.log('Loaded from cloud:', inventory.length, 'items');
+                            updateSyncStatus('โหลดจากคลาวด์สำเร็จ ☁️');
                         }
-                    }
-                }
-                
-                // Fallback to localStorage
-                const sharedDataStr = localStorage.getItem('iot-shared-data');
-                const sharedTimestamp = parseInt(localStorage.getItem('iot-shared-timestamp') || '0');
-                
-                if (sharedDataStr && sharedTimestamp > lastSyncTime) {
-                    const sharedData = JSON.parse(sharedDataStr);
-                    inventory = sharedData.inventory || [];
-                    settings = sharedData.settings || {};
-                    lastSyncTime = sharedTimestamp;
-                    return true;
-                }
-                
-                return false;
-            } catch (error) {
-                console.error('Sync from cloud error:', error);
-                return false;
-            }
-        }
-        
-        // Update sync status
-        function updateSyncStatus(status, isError = false) {
-            const statusElement = document.getElementById('sync-status');
-            if (statusElement) {
-                const color = isError ? 'text-red-700' : 'text-blue-700';
-                statusElement.className = `font-medium ${color}`;
-                statusElement.innerHTML = `🔄 <strong>สถานะ:</strong> ${status}`;
-            }
-        }
-        
-        // Real-time sync status update
-        setInterval(() => {
-            if (!cloudSyncEnabled) {
-                updateSyncStatus('ปิดการซิงค์');
-                return;
-            }
-            
-            updateSyncStatus('พร้อมใช้งาน - ซิงค์แบบเรียลไทม์ ✅');
-        }, 10000);
-        
-        // Handle sync toggle
-        document.addEventListener('DOMContentLoaded', function() {
-            const syncToggle = document.getElementById('cloud-sync-toggle');
-            if (syncToggle) {
-                syncToggle.addEventListener('change', function() {
-                    cloudSyncEnabled = this.checked;
-                    if (cloudSyncEnabled) {
-                        updateSyncStatus('เปิดการซิงค์แล้ว');
-                        syncToCloud(); // Sync immediately when enabled
                     } else {
-                        updateSyncStatus('ปิดการซิงค์');
+                        throw new Error('HTTP Error: ' + response.status);
                     }
-                });
+                } catch (error) {
+                    console.error('Cloud load error, trying local storage:', error);
+                    updateSyncStatus('ซิงค์ท้องถิ่นเท่านั้น 📱', 'text-orange-700');
+                    // Fall through to local load
+                    await loadData();
+                }
+            } else {
+                // Priority 2: IndexedDB / Local Storage
+                await loadData();
             }
-        });
+            // Update UI after loading is complete
+            updateOverview();
+            loadSettings();
+        }
+
+        // --- Core Inventory Logic ---
+
+        // Helper to normalize SNs from textarea
+        function normalizeSNs(snText) {
+            return snText
+                .split(/[\n,]/) // Split by newline or comma
+                .map(sn => sn.trim())
+                .filter(sn => sn.length > 0);
+        }
+
+        function generateUniqueId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        }
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', async function() {
-            try {
-                await initDB();
-                
-                // Load settings first to get cloud URL
-                await loadData();
-                loadSettings();
-                
-                // Set cloud sync URL from settings
-                cloudSyncUrl = settings.sheetsUrl || '';
-                
-                // Initialize sync system for cross-device sharing
-                initSyncSystem();
-                
-                // Try to load shared data from cloud first
-                if (cloudSyncUrl) {
-                    const hasCloudData = await loadSharedData();
-                    if (hasCloudData) {
-                        console.log('Loaded data from cloud successfully');
-                    }
-                }
-                
-                updateOverview();
-                loadSettings();
-                
-                // Share current data to cloud and localStorage
-                await shareUpdate();
-                
-                showMessage('🌐 ระบบแชร์ข้อมูลข้ามเครื่องพร้อมใช้งาน!', 'success');
-                updateSyncStatus('พร้อมใช้งาน - ซิงค์ข้ามเครื่อง ☁️');
-                
-            } catch (error) {
-                console.error('Initialization error:', error);
-                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูล กลับไปใช้ระบบสำรอง', 'error');
-                await loadData();
-                updateOverview();
-                loadSettings();
-                updateSyncStatus('ใช้ระบบสำรอง - ข้อมูลท้องถิ่นเท่านั้น 📱');
-            }
-        });
-
-        // Tab management
+        // --- Tab Management ---
         function showTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('[id$="-tab"]').forEach(tab => {
-                tab.classList.add('hidden');
-            });
-            
-            // Remove active state from all tab buttons
-            document.querySelectorAll('[id^="tab-"]').forEach(btn => {
-                btn.classList.remove('border-blue-500', 'text-blue-600', 'bg-blue-50');
-                btn.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            // Show selected tab
-            document.getElementById(tabName + '-tab').classList.remove('hidden');
-            
-            // Add active state to selected tab button
-            const activeBtn = document.getElementById('tab-' + tabName);
-            activeBtn.classList.add('border-blue-500', 'text-blue-600', 'bg-blue-50');
-            activeBtn.classList.remove('border-transparent', 'text-gray-500');
-        }
-
-        // Receive item
-        function receiveItem(event) {
-            event.preventDefault();
-            
-            const snInput = document.getElementById('receive-sn').value.trim();
-            const product = document.getElementById('receive-product').value;
-            const price = 0; // ไม่เก็บข้อมูลราคา
-            const quantity = 1;
-            const note = '';
-            
-            if (!snInput || !product) {
-                showMessage('กรุณากรอก Serial Number และเลือกสินค้า', 'error');
-                return;
-            }
-            
-            // Parse multiple SNs - split by newlines or commas
-            const snList = snInput.split(/[\n,]/)
-                .map(sn => sn.trim())
-                .filter(sn => sn.length > 0);
-            
-            if (snList.length === 0) {
-                showMessage('กรุณากรอก Serial Number', 'error');
-                return;
-            }
-            
-            let successCount = 0;
-            let duplicateCount = 0;
-            let duplicateSNs = [];
-            
-            // Process each SN
-            snList.forEach((sn, index) => {
-                // Check if SN already exists
-                const existingItem = inventory.find(item => item.sn === sn);
-                if (existingItem) {
-                    duplicateCount++;
-                    duplicateSNs.push(sn);
-                    return;
-                }
-                
-                // Add to inventory
-                const newItem = {
-                    id: Date.now() + index, // Ensure unique IDs
-                    sn: sn,
-                    product: product,
-                    price: price,
-                    quantity: quantity,
-                    status: 'in-stock',
-                    receivedDate: new Date().toISOString(),
-                    receivedBy: 'System',
-                    note: note
-                };
-                
-                inventory.push(newItem);
-                successCount++;
-                
-                // Auto-sync to Google Sheets
-                if (settings.autoSync) {
-                    autoSyncToSheets('receive', newItem);
-                }
-            });
-            
-            saveInventory();
-            
-            // Show results
-            if (successCount > 0) {
-                showMessage(`รับของเข้าสำเร็จ ${successCount} รายการ: ${product}`, 'success');
-            }
-            
-            if (duplicateCount > 0) {
-                showMessage(`พบ SN ซ้ำ ${duplicateCount} รายการ: ${duplicateSNs.slice(0, 3).join(', ')}${duplicateSNs.length > 3 ? '...' : ''}`, 'error');
-            }
-            
-            if (successCount === 0 && duplicateCount > 0) {
-                showMessage('ไม่มี SN ใหม่ที่สามารถเพิ่มได้', 'error');
-                return;
-            }
-            
-            // Clear form
-            document.getElementById('receive-sn').value = '';
-            document.getElementById('receive-product').value = '';
-            
-            updateOverview();
-            
-            // Focus back to SN input for continuous scanning
-            document.getElementById('receive-sn').focus();
-        }
-
-        // Issue item
-        function issueItem(event) {
-            event.preventDefault();
-            
-            const snInput = document.getElementById('issue-sn').value.trim();
-            const technician = document.getElementById('issue-technician').value.trim();
-            const quantity = 1;
-            
-            if (!snInput || !technician) {
-                showMessage('กรุณากรอก Serial Number และชื่อช่าง', 'error');
-                return;
-            }
-            
-            // Parse multiple SNs - split by newlines or commas
-            const snList = snInput.split(/[\n,]/)
-                .map(sn => sn.trim())
-                .filter(sn => sn.length > 0);
-            
-            if (snList.length === 0) {
-                showMessage('กรุณากรอก Serial Number', 'error');
-                return;
-            }
-            
-            let successCount = 0;
-            let notFoundCount = 0;
-            let insufficientCount = 0;
-            let notFoundSNs = [];
-            let insufficientSNs = [];
-            let issuedItems = [];
-            
-            // Process each SN
-            snList.forEach(sn => {
-                // Find item in inventory
-                const itemIndex = inventory.findIndex(item => item.sn === sn && item.status === 'in-stock');
-                if (itemIndex === -1) {
-                    notFoundCount++;
-                    notFoundSNs.push(sn);
-                    return;
-                }
-                
-                const item = inventory[itemIndex];
-                if (item.quantity < quantity) {
-                    insufficientCount++;
-                    insufficientSNs.push(`${sn} (คงเหลือ: ${item.quantity})`);
-                    return;
-                }
-                
-                // Update item status
-                if (item.quantity === quantity) {
-                    item.status = 'issued';
-                    item.quantity = 0;
+            ['overview', 'receive', 'issue', 'settings'].forEach(name => {
+                const tab = document.getElementById(`${name}-tab`);
+                const btn = document.getElementById(`tab-${name}`);
+                if (name === tabName) {
+                    tab.classList.remove('hidden');
+                    btn.classList.add('border-blue-500', 'text-blue-600', 'bg-blue-50');
+                    btn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700');
                 } else {
-                    item.quantity -= quantity;
-                }
-                
-                item.issuedDate = new Date().toISOString();
-                item.issuedTo = technician;
-                item.issuedQuantity = quantity;
-                
-                issuedItems.push(item);
-                successCount++;
-                
-                // Auto-sync to Google Sheets
-                if (settings.autoSync) {
-                    autoSyncToSheets('issue', item);
+                    tab.classList.add('hidden');
+                    btn.classList.remove('border-blue-500', 'text-blue-600', 'bg-blue-50');
+                    btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700');
                 }
             });
-            
-            saveInventory();
-            
-            // Show results
-            if (successCount > 0) {
-                const productList = [...new Set(issuedItems.map(item => item.product))].join(', ');
-                showMessage(`เบิกจ่ายสำเร็จ ${successCount} รายการ: ${productList} ให้ ${technician}`, 'success');
+            if (tabName === 'overview') {
+                updateOverview();
             }
-            
-            if (notFoundCount > 0) {
-                showMessage(`ไม่พบในสต็อค ${notFoundCount} รายการ: ${notFoundSNs.slice(0, 3).join(', ')}${notFoundSNs.length > 3 ? '...' : ''}`, 'error');
+            if (tabName === 'settings') {
+                loadSettings();
             }
-            
-            if (insufficientCount > 0) {
-                showMessage(`จำนวนไม่เพียงพอ ${insufficientCount} รายการ: ${insufficientSNs.slice(0, 2).join(', ')}${insufficientSNs.length > 2 ? '...' : ''}`, 'error');
-            }
-            
-            if (successCount === 0) {
-                showMessage('ไม่สามารถเบิกจ่ายรายการใดได้', 'error');
-                return;
-            }
-            
-            // Clear form
-            document.getElementById('issue-sn').value = '';
-            document.getElementById('issue-technician').value = '';
-            
-            updateOverview();
-            
-            // Focus back to SN input for continuous scanning
-            document.getElementById('issue-sn').focus();
         }
 
-        // Update overview
+        // --- UI Update & Rendering ---
+        
         function updateOverview() {
+            // Update summary statistics
             const totalItems = inventory.length;
-            const stockItems = inventory.filter(item => item.status === 'in-stock').length;
-            const issuedItems = inventory.filter(item => item.status === 'issued').length;
-            
+            const issuedItems = inventory.filter(item => item.status === 'เบิกจ่ายแล้ว').length;
+            const stockItems = totalItems - issuedItems;
+
             document.getElementById('total-items').textContent = totalItems;
             document.getElementById('stock-items').textContent = stockItems;
             document.getElementById('issued-items').textContent = issuedItems;
             
-            updateItemsTable();
+            // Render table
+            renderTable();
         }
 
-        // Update items table
-        function updateItemsTable() {
-            const tbody = document.getElementById('items-table');
-            tbody.innerHTML = '';
+        function renderTable() {
+            const tableBody = document.getElementById('items-table');
+            tableBody.innerHTML = '';
             
-            const recentItems = inventory.slice(-10).reverse();
+            // Sort inventory by date descending (latest first)
+            const sortedInventory = [...inventory].sort((a, b) => b.timestamp - a.timestamp);
             
-            recentItems.forEach(item => {
+            // Calculate total pages
+            const totalItems = sortedInventory.length;
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            
+            // Adjust current page if necessary
+            if (currentPage > totalPages && totalPages > 0) {
+                currentPage = totalPages;
+            } else if (totalPages === 0) {
+                currentPage = 1;
+            }
+
+            // Slice data for the current page
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const paginatedItems = sortedInventory.slice(startIndex, endIndex);
+
+            paginatedItems.forEach(item => {
+                const statusClass = item.status === 'เบิกจ่ายแล้ว' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800';
                 const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
-                
-                const statusBadge = item.status === 'in-stock' 
-                    ? '<span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">คงเหลือ</span>'
-                    : '<span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">เบิกแล้ว</span>';
-                
-                const date = new Date(item.receivedDate).toLocaleDateString('th-TH');
-                
+                row.className = 'hover:bg-gray-50 transition-colors';
                 row.innerHTML = `
-                    <td class="px-4 py-3 font-mono text-sm">${item.sn}</td>
-                    <td class="px-4 py-3">${item.product}</td>
-                    <td class="px-4 py-3">${statusBadge}</td>
-                    <td class="px-4 py-3">${date}</td>
+                    <td class="px-4 py-3 font-medium text-gray-900">${item.sn}</td>
+                    <td class="px-4 py-3">${item.product || 'N/A'}</td>
+                    <td class="px-4 py-3">
+                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                            ${item.status}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-500">${new Date(item.timestamp).toLocaleString('th-TH')}</td>
                 `;
-                
-                tbody.appendChild(row);
+                tableBody.appendChild(row);
             });
+            
+            // Update pagination controls
+            document.getElementById('page-info').textContent = `หน้า ${currentPage} จาก ${totalPages || 1}`;
+            document.getElementById('prev-page-btn').disabled = currentPage === 1;
+            document.getElementById('next-page-btn').disabled = currentPage === totalPages || totalPages === 0;
         }
-
-        // Save inventory to IndexedDB and share to other tabs
-        async function saveInventory() {
-            try {
-                // Clear existing data
-                await clearStore('inventory');
-                
-                // Save all inventory items
-                for (const item of inventory) {
-                    await saveToStore('inventory', item);
-                }
-                
-                // Also save to localStorage as backup
-                await saveToLocalStorage();
-                
-                // Share to other tabs immediately
-                shareUpdate();
-                
-            } catch (error) {
-                console.error('Error saving inventory:', error);
-                // Fallback to localStorage only
-                await saveToLocalStorage();
-                shareUpdate(); // Still try to share
+        
+        function changePage(delta) {
+            const totalPages = Math.ceil(inventory.length / itemsPerPage);
+            const newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                renderTable();
             }
         }
 
-        // Save settings to IndexedDB and share to other tabs
-        async function saveSettings() {
-            try {
-                // Clear existing settings
-                await clearStore('settings');
-                
-                // Save all settings
-                for (const [key, value] of Object.entries(settings)) {
-                    await saveToStore('settings', { key, value });
-                }
-                
-                // Also save to localStorage as backup
-                await saveToLocalStorage();
-                
-                // Share to other tabs immediately
-                shareUpdate();
-                
-            } catch (error) {
-                console.error('Error saving settings:', error);
-                // Fallback to localStorage only
-                await saveToLocalStorage();
-                shareUpdate(); // Still try to share
+        // --- Message System ---
+        function showMessage(message, type = 'success') {
+            const container = document.getElementById('message-container');
+            const color = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : (type === 'warning' ? 'bg-yellow-600' : 'bg-blue-600'));
+            const item = document.createElement('div');
+            item.className = `p-4 mb-2 rounded-lg shadow-xl text-white fade-in ${color}`;
+            item.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        ${type === 'success' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>' : (type === 'error' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>' : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>')}
+                    </svg>
+                    <span>${message}</span>
+                </div>
+            `;
+            container.appendChild(item);
+            setTimeout(() => {
+                item.classList.remove('fade-in');
+                item.style.opacity = '0';
+                item.style.transform = 'translateY(-10px)';
+                setTimeout(() => item.remove(), 300);
+            }, 5000);
+        }
+        
+        function updateSyncStatus(message, classes = 'text-blue-700') {
+            const statusElement = document.getElementById('sync-status');
+            if (statusElement) {
+                statusElement.innerHTML = message;
+                statusElement.className = `font-medium ${classes}`;
             }
         }
+        
+        // --- CRUD Operations ---
 
-        // Load settings
+        // 📥 Receive Item
+        async function receiveItem(event) {
+            event.preventDefault();
+            const snText = document.getElementById('receive-sn').value;
+            const product = document.getElementById('receive-product').value;
+            const sns = normalizeSNs(snText);
+
+            if (!product) {
+                showMessage('กรุณาเลือกชื่อสินค้า!', 'error');
+                return;
+            }
+            if (sns.length === 0) {
+                showMessage('กรุณาใส่ Serial Number อย่างน้อยหนึ่งตัว!', 'error');
+                return;
+            }
+
+            let receivedCount = 0;
+            let rejectedCount = 0;
+            const newInventory = [];
+            const timestamp = Date.now();
+            
+            for (const sn of sns) {
+                const existingIndex = inventory.findIndex(item => item.sn === sn);
+
+                if (existingIndex !== -1) {
+                    // Item exists, update status to stock if currently issued
+                    if (inventory[existingIndex].status === 'เบิกจ่ายแล้ว') {
+                        inventory[existingIndex].status = 'คงเหลือในสต็อค';
+                        inventory[existingIndex].product = product; // Update product name
+                        inventory[existingIndex].technician = ''; // Clear technician
+                        inventory[existingIndex].timestamp = timestamp;
+                        await saveToStore('inventory', inventory[existingIndex]);
+                        receivedCount++;
+                    } else {
+                        // Already in stock
+                        rejectedCount++;
+                        console.warn(`SN ${sn} is already in stock.`);
+                    }
+                } else {
+                    // New item
+                    const newItem = {
+                        id: generateUniqueId(),
+                        sn: sn,
+                        product: product,
+                        status: 'คงเหลือในสต็อค',
+                        timestamp: timestamp,
+                        technician: ''
+                    };
+                    inventory.push(newItem);
+                    newInventory.push(newItem);
+                    await saveToStore('inventory', newItem);
+                    receivedCount++;
+                }
+            }
+
+            if (receivedCount > 0) {
+                showMessage(`รับของเข้าสต็อคสำเร็จ: ${receivedCount} รายการ`, 'success');
+            }
+            if (rejectedCount > 0) {
+                showMessage(`คำเตือน: ${rejectedCount} รายการมีอยู่แล้ว`, 'warning');
+            }
+
+            document.getElementById('receive-sn').value = '';
+            document.getElementById('receive-product').value = '';
+
+            await shareUpdate();
+            updateOverview();
+        }
+
+        // 📤 Issue Item
+        async function issueItem(event) {
+            event.preventDefault();
+            const snText = document.getElementById('issue-sn').value;
+            const technician = document.getElementById('issue-technician').value.trim();
+            const sns = normalizeSNs(snText);
+
+            if (!technician) {
+                showMessage('กรุณาใส่ชื่อช่างที่เบิก!', 'error');
+                return;
+            }
+            if (sns.length === 0) {
+                showMessage('กรุณาใส่ Serial Number อย่างน้อยหนึ่งตัว!', 'error');
+                return;
+            }
+
+            let issuedCount = 0;
+            let notFoundCount = 0;
+            let alreadyIssuedCount = 0;
+            const timestamp = Date.now();
+
+            for (const sn of sns) {
+                const existingIndex = inventory.findIndex(item => item.sn === sn);
+
+                if (existingIndex !== -1) {
+                    if (inventory[existingIndex].status === 'คงเหลือในสต็อค') {
+                        inventory[existingIndex].status = 'เบิกจ่ายแล้ว';
+                        inventory[existingIndex].technician = technician;
+                        inventory[existingIndex].timestamp = timestamp;
+                        await saveToStore('inventory', inventory[existingIndex]);
+                        issuedCount++;
+                    } else {
+                        alreadyIssuedCount++;
+                    }
+                } else {
+                    notFoundCount++;
+                }
+            }
+            
+            if (issuedCount > 0) {
+                showMessage(`เบิกจ่ายสำเร็จ: ${issuedCount} รายการ ให้กับช่าง ${technician}`, 'success');
+            }
+            if (alreadyIssuedCount > 0) {
+                showMessage(`คำเตือน: ${alreadyIssuedCount} รายการเบิกจ่ายไปแล้ว`, 'warning');
+            }
+            if (notFoundCount > 0) {
+                showMessage(`ข้อผิดพลาด: ไม่พบ SN ในสต็อค: ${notFoundCount} รายการ`, 'error');
+            }
+
+            document.getElementById('issue-sn').value = '';
+            document.getElementById('issue-technician').value = '';
+            
+            await shareUpdate();
+            updateOverview();
+        }
+
+        // --- Settings and Cloud Logic ---
+        
         function loadSettings() {
-            if (settings.sheetsUrl) {
-                document.getElementById('sheets-url').value = settings.sheetsUrl;
-            }
-            if (settings.apiKey) {
-                document.getElementById('api-key').value = settings.apiKey;
-            }
-            if (settings.autoSync) {
-                document.getElementById('auto-sync').checked = settings.autoSync;
-            }
+            document.getElementById('sheets-url').value = settings.sheetsUrl || '';
+            document.getElementById('api-key').value = settings.apiKey || '';
+            document.getElementById('auto-sync').checked = settings.autoSync !== false;
+            document.getElementById('cloud-sync-toggle').checked = settings.cloudSyncEnabled !== false;
+            cloudSyncEnabled = settings.cloudSyncEnabled !== false;
+            cloudSyncUrl = settings.sheetsUrl || '';
+            
+            // Update settings object
+            settings = {
+                sheetsUrl: document.getElementById('sheets-url').value,
+                apiKey: document.getElementById('api-key').value,
+                autoSync: document.getElementById('auto-sync').checked,
+                cloudSyncEnabled: document.getElementById('cloud-sync-toggle').checked
+            };
         }
 
-        // Test connection
+        async function saveSettings() {
+            settings = {
+                sheetsUrl: document.getElementById('sheets-url').value,
+                apiKey: document.getElementById('api-key').value,
+                autoSync: document.getElementById('auto-sync').checked,
+                cloudSyncEnabled: document.getElementById('cloud-sync-toggle').checked
+            };
+            
+            await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] })));
+            localStorage.setItem('iot-settings', JSON.stringify(settings)); // Fallback
+            
+            cloudSyncUrl = settings.sheetsUrl;
+            cloudSyncEnabled = settings.cloudSyncEnabled;
+            
+            showMessage('บันทึกการตั้งค่าแล้ว', 'info');
+        }
+        
         async function testConnection() {
-            const sheetsUrl = document.getElementById('sheets-url').value.trim();
-            const apiKey = document.getElementById('api-key').value.trim();
-            const autoSync = document.getElementById('auto-sync').checked;
-            
-            if (!sheetsUrl) {
-                showMessage('กรุณาใส่ Google Apps Script URL', 'error');
+            const url = document.getElementById('sheets-url').value;
+            if (!url) {
+                showMessage('กรุณาใส่ Google Apps Script URL ก่อน!', 'error');
                 return;
             }
             
-            // Validate URL format
-            if (!sheetsUrl.includes('script.google.com') || !sheetsUrl.includes('/exec')) {
-                showMessage('URL ต้องเป็น Google Apps Script Web App URL ที่ลงท้ายด้วย /exec', 'error');
-                return;
-            }
-            
-            // Save settings
-            settings.sheetsUrl = sheetsUrl;
-            settings.apiKey = apiKey;
-            settings.autoSync = autoSync;
-            cloudSyncUrl = sheetsUrl; // Update cloud sync URL
-            await saveSettings();
-            
-            // Test actual connection
+            showMessage('กำลังทดสอบการเชื่อมต่อ...', 'info');
+
             try {
-                showMessage('กำลังทดสอบการเชื่อมต่อและระบบแชร์ข้อมูล...', 'info');
+                // Retry logic for robustness against temporary network issues
+                let response = null;
+                const maxRetries = 3;
+                let delay = 1000;
                 
-                // Test GET method for data retrieval
-                try {
-                    const response = await fetch(sheetsUrl + '?action=getData&timestamp=' + Date.now(), {
-                        method: 'GET',
-                        mode: 'cors'
-                    });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        if (result.success) {
-                            showMessage('✅ เชื่อมต่อสำเร็จ! ระบบแชร์ข้อมูลข้ามเครื่องพร้อมใช้งาน', 'success');
-                            showMessage('🌐 ตอนนี้คนอื่นจะเห็นข้อมูลเดียวกันทุกเครื่อง', 'info');
-                            updateSyncStatus('เชื่อมต่อคลาวด์สำเร็จ ☁️');
-                            
-                            // Try to sync existing data to cloud
-                            if (inventory.length > 0) {
-                                await shareUpdate();
-                                showMessage('📤 ส่งข้อมูลปัจจุบันไปคลาวด์แล้ว', 'info');
-                            }
-                            
-                            return;
+                for (let i = 0; i < maxRetries; i++) {
+                    try {
+                        // FIX: Removed 'Content-Type: application/json' header to ensure a "Simple Request"
+                        // is made, bypassing the preflight OPTIONS check that fails with GAS on localhost.
+                        response = await fetch(url, {
+                            method: 'POST',
+                            mode: 'cors',
+                            body: JSON.stringify({ action: 'test' })
+                        });
+                        if (response.ok) break; // Success, break retry loop
+                    } catch (e) {
+                        // Network error, pause before retry
+                        if (i < maxRetries - 1) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2; // Exponential backoff
+                        } else {
+                             throw e; // Last retry failed, throw original error
                         }
                     }
-                } catch (corsError) {
-                    console.log('CORS test failed, trying no-cors mode');
                 }
                 
-                // Fallback to no-cors mode
-                await fetch(sheetsUrl, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        action: 'test',
-                        timestamp: new Date().toISOString()
-                    })
-                });
-                
-                showMessage('⚠️ เชื่อมต่อได้แต่ไม่สามารถอ่านข้อมูลกลับได้', 'info');
-                showMessage('ระบบจะทำงานแบบส่งข้อมูลเท่านั้น (ไม่สามารถแชร์ข้ามเครื่องได้)', 'error');
-                updateSyncStatus('เชื่อมต่อแบบจำกัด - ส่งข้อมูลเท่านั้น 📤');
-                
+                if (response && response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        showMessage('เชื่อมต่อ Google Sheets สำเร็จ! ✅', 'success');
+                        return;
+                    } else {
+                        // The Apps Script deployed, but the code failed internally
+                        showMessage('เชื่อมต่อล้มเหลว (Apps Script ภายใน): ' + (result.error || 'Unknown error'), 'error');
+                        return;
+                    }
+                } else {
+                    // The request reached the server but returned a non-200 status
+                     throw new Error('HTTP Error: ' + response?.status);
+                }
+
             } catch (error) {
-                console.error('Connection test failed:', error);
-                showMessage('❌ ไม่สามารถเชื่อมต่อได้', 'error');
-                showMessage('ตรวจสอบ: 1) URL ถูกต้อง 2) Deploy เป็น Web App 3) Access = Anyone', 'info');
-                updateSyncStatus('เชื่อมต่อไม่สำเร็จ ❌');
+                // The network request failed completely (e.g. CORS, bad URL, deployment error)
+                showMessage('ข้อผิดพลาดในการเชื่อมต่อ: กรุณาตรวจสอบ URL และการ Deploy', 'error');
+                console.error('Connection Test Error:', error);
             }
         }
-
-        // Export to Google Sheets
+        
         async function exportToGoogleSheets() {
-            if (!settings.sheetsUrl) {
+            if (!cloudSyncUrl) {
                 showMessage('กรุณาตั้งค่า Google Apps Script URL ก่อน', 'error');
                 showTab('settings');
                 return;
             }
             
-            if (inventory.length === 0) {
-                showMessage('ไม่มีข้อมูลสินค้าให้ส่ง', 'error');
-                return;
-            }
-            
-            // Prepare data for export
-            const exportData = inventory.map(item => ({
-                'Serial Number': item.sn,
-                'สินค้า': item.product,
-                'ราคา': item.price,
-                'จำนวน': item.quantity,
-                'สถานะ': item.status === 'in-stock' ? 'คงเหลือ' : 'เบิกแล้ว',
-                'วันที่รับ': new Date(item.receivedDate).toLocaleDateString('th-TH'),
-                'ผู้เบิก': item.issuedTo || '-',
-                'หมายเหตุ': item.note || '-',
-                'วันที่เบิก': item.issuedDate ? new Date(item.issuedDate).toLocaleDateString('th-TH') : '-'
+            const inventoryToExport = inventory.map(item => ({
+                SN: item.sn,
+                Product: item.product,
+                Status: item.status,
+                Technician: item.technician || '-',
+                Date: new Date(item.timestamp).toLocaleString('th-TH')
             }));
+
+            if (inventoryToExport.length === 0) {
+                 showMessage('ไม่มีข้อมูลให้ส่งออก', 'info');
+                 return;
+            }
             
-            showMessage(`กำลังส่งข้อมูล ${exportData.length} รายการไป Google Sheets...`, 'info');
-            
+            showMessage('กำลังส่งข้อมูลไปยัง Google Sheets...', 'info');
+
             try {
-                // Use no-cors mode to avoid CORS issues
-                const response = await fetch(settings.sheetsUrl, {
+                // FIX: Removed 'Content-Type: application/json' header to ensure a "Simple Request"
+                // is made, bypassing the preflight OPTIONS check that fails with GAS on localhost.
+                const response = await fetch(cloudSyncUrl, {
                     method: 'POST',
-                    mode: 'no-cors',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        action: 'updateInventory',
-                        data: exportData,
-                        timestamp: new Date().toISOString()
+                    mode: 'cors',
+                    body: JSON.stringify({ 
+                        action: 'updateInventory', 
+                        data: inventoryToExport,
+                        apiKey: settings.apiKey 
                     })
                 });
                 
-                // With no-cors, we can't read the response, but if no error is thrown,
-                // the request was likely successful
-                showMessage('ส่งข้อมูลไป Google Sheets สำเร็จ!', 'success');
-                showMessage('ตรวจสอบข้อมูลใน Google Sheets ของคุณ', 'info');
+                const result = await response.json();
                 
-            } catch (error) {
-                console.error('Export error:', error);
-                
-                // Try alternative method with form data
-                try {
-                    const formData = new FormData();
-                    formData.append('data', JSON.stringify({
-                        action: 'updateInventory',
-                        data: exportData,
-                        timestamp: new Date().toISOString()
-                    }));
-                    
-                    await fetch(settings.sheetsUrl, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: formData
-                    });
-                    
-                    showMessage('ส่งข้อมูลไป Google Sheets สำเร็จ! (วิธีสำรอง)', 'success');
-                } catch (secondError) {
-                    showMessage('ไม่สามารถส่งข้อมูลได้ ตรวจสอบการตั้งค่า Google Apps Script', 'error');
-                    showMessage('ตรวจสอบ: 1) URL ถูกต้อง 2) Deploy เป็น Web App 3) Access = Anyone', 'info');
+                if (result.success) {
+                    showMessage(`ส่งข้อมูล ${result.rows} รายการไปยัง Google Sheets สำเร็จ!`, 'success');
+                } else {
+                    showMessage('ส่งข้อมูลล้มเหลว: ' + (result.error || 'Unknown error'), 'error');
                 }
-            }
-        }
-
-        // Auto-sync to Google Sheets when items are added/updated
-        async function autoSyncToSheets(action, itemData) {
-            if (!settings.sheetsUrl || !settings.autoSync) return;
-            
-            try {
-                await fetch(settings.sheetsUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        action: action, // 'receive' or 'issue'
-                        data: itemData,
-                        timestamp: new Date().toISOString()
-                    })
-                });
             } catch (error) {
-                console.log('Auto-sync failed:', error);
+                showMessage('ข้อผิดพลาดในการส่งข้อมูล: กรุณาตรวจสอบการเชื่อมต่อ', 'error');
+                console.error('Export Error:', error);
             }
         }
 
-        // Show message
-        function showMessage(text, type = 'info') {
-            const container = document.getElementById('message-container');
-            const message = document.createElement('div');
-            
-            const colors = {
-                success: 'bg-green-500',
-                error: 'bg-red-500',
-                info: 'bg-blue-500'
-            };
-            
-            message.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg mb-2 fade-in`;
-            message.textContent = text;
-            
-            container.appendChild(message);
-            
-            setTimeout(() => {
-                message.remove();
-            }, 5000);
-        }
+        // --- Password Confirmation and Deletion Logic ---
 
-        // Show delete confirmation modal
+        // 1. รหัสผ่านลับสำหรับการลบข้อมูลทั้งหมด
+        const DELETE_PASSWORD = "John19195";
+
         function showDeleteConfirmModal() {
             document.getElementById('delete-modal').classList.remove('hidden');
-            document.getElementById('delete-password').value = '';
+            document.getElementById('delete-password').value = ''; // Clear input on open
             document.getElementById('delete-password').focus();
         }
-        
-        // Hide delete confirmation modal
+
         function hideDeleteConfirmModal() {
             document.getElementById('delete-modal').classList.add('hidden');
-            document.getElementById('delete-password').value = '';
         }
-        
-        // Confirm delete with password
+
+        /**
+         * 🚨 นี่คือฟังก์ชันหลักที่ทำการตรวจสอบรหัสผ่าน 🚨
+         */
         async function confirmDeleteAllData() {
-            const password = document.getElementById('delete-password').value;
-            const correctPassword = 'John19195';
-            
-            if (password !== correctPassword) {
-                showMessage('🔐 รหัสผ่านไม่ถูกต้อง', 'error');
+            const enteredPassword = document.getElementById('delete-password').value;
+
+            // ตรวจสอบรหัสผ่าน: ถ้าถูกต้อง
+            if (enteredPassword === DELETE_PASSWORD) {
+                // รหัสผ่านถูกต้อง -> ดำเนินการลบ
+                await deleteAllData();
+                hideDeleteConfirmModal();
+                showMessage('✅ ล้างข้อมูลทั้งหมดในระบบสำเร็จแล้ว!', 'success');
+                updateOverview();
+            } else {
+                // รหัสผ่านไม่ถูกต้อง -> แจ้งเตือน
+                showMessage('รหัสผ่านไม่ถูกต้อง! กรุณาลองใหม่อีกครั้ง', 'error');
                 document.getElementById('delete-password').value = '';
                 document.getElementById('delete-password').focus();
-                return;
-            }
-            
-            hideDeleteConfirmModal();
-            
-            try {
-                // Clear IndexedDB
-                await clearStore('inventory');
-                await clearStore('settings');
-                
-                // Clear localStorage
-                localStorage.removeItem('iot-inventory');
-                localStorage.removeItem('iot-settings');
-                localStorage.removeItem('iot-cloud-data');
-                localStorage.removeItem('iot-cloud-sync-time');
-                
-                // Reset variables
-                inventory = [];
-                settings = {};
-                lastSyncTime = 0;
-                
-                // Update UI
-                updateOverview();
-                document.getElementById('sheets-url').value = '';
-                document.getElementById('api-key').value = '';
-                document.getElementById('auto-sync').checked = false;
-                
-                // Share empty data to other tabs
-                shareUpdate();
-                
-                showMessage('🗑️ ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
-                showMessage('📊 ข้อมูลถูกลบออกจากระบบแชร์แล้ว', 'info');
-                
-            } catch (error) {
-                console.error('Error clearing data:', error);
-                showMessage('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
             }
         }
 
-        // Clear all data (legacy function for settings page)
-        async function clearAllData() {
-            if (!confirm('⚠️ คุณแน่ใจหรือไม่ที่จะลบข้อมูลทั้งหมด?\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!')) {
-                return;
-            }
+        /**
+         * ฟังก์ชันลบข้อมูลจริงจาก IndexedDB, LocalStorage และ Cloud
+         */
+        async function deleteAllData() {
+            // ล้าง IndexedDB
+            await clearStore('inventory');
+            await clearStore('settings');
+
+            // ล้าง LocalStorage (ตัวสำรอง)
+            localStorage.removeItem('iot-inventory');
+            localStorage.removeItem('iot-settings');
+            localStorage.removeItem('iot-shared-data');
             
-            if (!confirm('🚨 ยืนยันอีกครั้ง: ลบข้อมูลสินค้าและการตั้งค่าทั้งหมด?')) {
-                return;
-            }
+            // รีเซ็ตข้อมูลในหน่วยความจำ
+            inventory = [];
+            settings = {};
             
-            try {
-                // Clear IndexedDB
-                await clearStore('inventory');
-                await clearStore('settings');
-                
-                // Clear localStorage
-                localStorage.removeItem('iot-inventory');
-                localStorage.removeItem('iot-settings');
-                localStorage.removeItem('iot-cloud-data');
-                localStorage.removeItem('iot-cloud-sync-time');
-                
-                // Reset variables
-                inventory = [];
-                settings = {};
-                lastSyncTime = 0;
-                
-                // Update UI
-                updateOverview();
-                document.getElementById('sheets-url').value = '';
-                document.getElementById('api-key').value = '';
-                document.getElementById('auto-sync').checked = false;
-                
-                // Share empty data to other tabs
-                shareUpdate();
-                
-                showMessage('ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
-                
-            } catch (error) {
-                console.error('Error clearing data:', error);
-                showMessage('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
-            }
+            // ซิงค์การลบไปที่ Cloud (ถ้าเชื่อมต่ออยู่)
+            await shareUpdate(); // ส่งข้อมูลว่างเปล่าไป Cloud เพื่อบอกว่าถูกลบแล้ว
+
+            console.log('All data deleted successfully.');
         }
 
-        // Auto-focus on SN inputs when tabs are shown
-        document.getElementById('tab-receive').addEventListener('click', () => {
-            setTimeout(() => document.getElementById('receive-sn').focus(), 100);
-        });
+        // --- Initialization ---
+
+        window.onload = async () => {
+            await initDB();
+            await loadSharedData();
+            loadSettings();
+            initSyncSystem();
+            showTab('overview'); // Start on the overview tab
+        };
         
-        document.getElementById('tab-issue').addEventListener('click', () => {
-            setTimeout(() => document.getElementById('issue-sn').focus(), 100);
-        });
+        // BroadcastChannel for real-time update between tabs/windows
+        const channel = new BroadcastChannel('iot-inventory-channel');
+        channel.onmessage = async (event) => {
+            if (event.data.action === 'dataUpdate' && !isUpdatingFromSync) {
+                console.log('Broadcast received, checking for updates...');
+                // Force a full update from cloud/local to ensure consistency
+                await loadSharedData(); 
+            }
+        };
+
+        // Override the shareUpdate to also broadcast
+        const originalShareUpdate = shareUpdate;
+        shareUpdate = async function() {
+            await originalShareUpdate();
+            // Send broadcast to other local tabs/windows
+            channel.postMessage({ action: 'dataUpdate', timestamp: Date.now() });
+        };
         
-        // Handle Enter key in delete password field
-        document.addEventListener('DOMContentLoaded', function() {
-            const deletePasswordField = document.getElementById('delete-password');
-            if (deletePasswordField) {
-                deletePasswordField.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        confirmDeleteAllData();
-                    }
-                });
-            }
-            
-            // Close modal when clicking outside
-            const deleteModal = document.getElementById('delete-modal');
-            if (deleteModal) {
-                deleteModal.addEventListener('click', function(e) {
-                    if (e.target === deleteModal) {
-                        hideDeleteConfirmModal();
-                    }
-                });
-            }
-        });
+        // Call shareUpdate when settings change to keep other tabs/devices updated
+        const originalSaveSettings = saveSettings;
+        saveSettings = async function() {
+            await originalSaveSettings();
+            await shareUpdate();
+        };
+
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988aa9e7c58b4d99',t:'MTc1OTQ3NTg4Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
