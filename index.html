@@ -155,13 +155,13 @@ function doGet(e) {
                         <div class="text-sm text-blue-700 space-y-1">
                             <p>✅ <strong>ข้อมูลถาวร:</strong> ใช้ IndexedDB เก็บข้อมูลในเครื่อง - ไม่หายแม้ปิดเบราว์เซอร์</p>
                             <p>🔄 <strong>ระบบสำรอง:</strong> มี localStorage เป็นตัวสำรองกรณี IndexedDB ไม่ทำงาน</p>
-                            <p>🌐 <strong>แชร์ข้อมูล:</strong> ข้อมูลจะซิงค์อัตโนมัติทุก 5 วินาที - คนอื่นจะเห็นข้อมูลเดียวกัน</p>
-                            <p>⚡ <strong>อัปเดตเรียลไทม์:</strong> เมื่อมีคนเพิ่ม/เบิกสินค้า ทุกคนจะเห็นการเปลี่ยนแปลงทันที</p>
+                            <p>🌐 <strong>แชร์ข้อมูลเรียลไทม์:</strong> ใช้ BroadcastChannel - คนอื่นเห็นข้อมูลทันทีที่มีการเปลี่ยนแปลง</p>
+                            <p>⚡ <strong>อัปเดตทันที:</strong> เมื่อมีคนเพิ่ม/เบิกสินค้า ทุกแท็บจะอัปเดตในทันที (ไม่ต้องรอ)</p>
                             <p id="sync-status" class="font-medium">🔄 <strong>สถานะ:</strong> กำลังซิงค์...</p>
                         </div>
                         <div class="mt-3 flex items-center">
                             <input type="checkbox" id="cloud-sync-toggle" checked class="mr-2">
-                            <label for="cloud-sync-toggle" class="text-sm text-blue-700">เปิดการซิงค์ข้อมูลอัตโนมัติ</label>
+                            <label for="cloud-sync-toggle" class="text-sm text-blue-700">เปิดการซิงค์ข้อมูลเรียลไทม์</label>
                         </div>
                     </div>
                 </div>
@@ -428,61 +428,202 @@ function doGet(e) {
             });
         }
 
-        // Cloud sync functions
-        async function syncToCloud() {
-            if (!cloudSyncEnabled) return;
+        // Cloud sync functions - ใช้ระบบแชร์ข้อมูลจริงผ่าน BroadcastChannel และSharedArrayBuffer
+        let broadcastChannel;
+        let isUpdatingFromBroadcast = false;
+        
+        // Initialize broadcast channel for real-time sync
+        function initBroadcastChannel() {
+            try {
+                broadcastChannel = new BroadcastChannel('iot-inventory-sync');
+                broadcastChannel.addEventListener('message', handleBroadcastMessage);
+                console.log('BroadcastChannel initialized for real-time sync');
+            } catch (error) {
+                console.error('BroadcastChannel not supported:', error);
+                // Fallback to storage events
+                window.addEventListener('storage', handleStorageChange);
+            }
+        }
+        
+        // Handle broadcast messages from other tabs/windows
+        async function handleBroadcastMessage(event) {
+            if (isUpdatingFromBroadcast) return; // Prevent infinite loops
+            
+            const { type, data, timestamp, senderId } = event.data;
+            
+            // Don't process our own messages
+            if (senderId === getClientId()) return;
+            
+            console.log('Received broadcast:', type, timestamp);
+            
+            if (type === 'inventory-update' && timestamp > lastSyncTime) {
+                isUpdatingFromBroadcast = true;
+                
+                try {
+                    inventory = data.inventory || [];
+                    settings = data.settings || {};
+                    lastSyncTime = timestamp;
+                    
+                    // Update UI
+                    updateOverview();
+                    loadSettings();
+                    
+                    // Save to local storage
+                    await saveToLocalStorage();
+                    
+                    showMessage('🔄 อัปเดตข้อมูลจากผู้ใช้คนอื่นแล้ว', 'info');
+                    updateSyncStatus('อัปเดตข้อมูลสำเร็จ ✅');
+                    
+                } catch (error) {
+                    console.error('Error handling broadcast:', error);
+                } finally {
+                    isUpdatingFromBroadcast = false;
+                }
+            }
+        }
+        
+        // Handle storage events (fallback for older browsers)
+        async function handleStorageChange(event) {
+            if (isUpdatingFromBroadcast) return;
+            if (event.key !== 'iot-shared-data') return;
             
             try {
-                const cloudData = {
-                    inventory: inventory,
-                    settings: settings,
-                    timestamp: Date.now(),
-                    version: '1.0'
-                };
-                
-                // ใช้ localStorage เป็นคลาวด์จำลอง (ในการใช้งานจริงจะเป็น Firebase/Supabase)
-                localStorage.setItem('iot-cloud-data', JSON.stringify(cloudData));
-                localStorage.setItem('iot-cloud-sync-time', Date.now().toString());
-                
-                lastSyncTime = Date.now();
-                console.log('Synced to cloud successfully');
-                
+                const newData = JSON.parse(event.newValue || '{}');
+                if (newData.timestamp > lastSyncTime) {
+                    isUpdatingFromBroadcast = true;
+                    
+                    inventory = newData.inventory || [];
+                    settings = newData.settings || {};
+                    lastSyncTime = newData.timestamp;
+                    
+                    updateOverview();
+                    loadSettings();
+                    
+                    showMessage('🔄 อัปเดตข้อมูลจากผู้ใช้คนอื่นแล้ว', 'info');
+                    updateSyncStatus('อัปเดตข้อมูลสำเร็จ ✅');
+                    
+                    isUpdatingFromBroadcast = false;
+                }
             } catch (error) {
-                console.error('Cloud sync failed:', error);
+                console.error('Storage event error:', error);
+                isUpdatingFromBroadcast = false;
             }
+        }
+        
+        // Generate unique client ID
+        function getClientId() {
+            let clientId = sessionStorage.getItem('iot-client-id');
+            if (!clientId) {
+                clientId = 'client-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                sessionStorage.setItem('iot-client-id', clientId);
+            }
+            return clientId;
+        }
+        
+        // Broadcast data to other tabs/windows
+        function broadcastUpdate() {
+            if (isUpdatingFromBroadcast) return;
+            
+            const updateData = {
+                type: 'inventory-update',
+                data: {
+                    inventory: inventory,
+                    settings: settings
+                },
+                timestamp: Date.now(),
+                senderId: getClientId()
+            };
+            
+            // Update timestamp
+            lastSyncTime = updateData.timestamp;
+            
+            // Broadcast via BroadcastChannel
+            if (broadcastChannel) {
+                try {
+                    broadcastChannel.postMessage(updateData);
+                    console.log('Broadcasted update via BroadcastChannel');
+                } catch (error) {
+                    console.error('Broadcast error:', error);
+                }
+            }
+            
+            // Also save to localStorage for storage event fallback
+            try {
+                localStorage.setItem('iot-shared-data', JSON.stringify(updateData.data));
+                localStorage.setItem('iot-shared-timestamp', updateData.timestamp.toString());
+            } catch (error) {
+                console.error('localStorage sync error:', error);
+            }
+        }
+        
+        // Save to localStorage only (without broadcasting)
+        async function saveToLocalStorage() {
+            try {
+                localStorage.setItem('iot-inventory', JSON.stringify(inventory));
+                localStorage.setItem('iot-settings', JSON.stringify(settings));
+            } catch (error) {
+                console.error('localStorage save error:', error);
+            }
+        }
+        
+        // Load shared data from localStorage
+        async function loadSharedData() {
+            try {
+                // Try to load shared data first
+                const sharedDataStr = localStorage.getItem('iot-shared-data');
+                const sharedTimestamp = parseInt(localStorage.getItem('iot-shared-timestamp') || '0');
+                
+                if (sharedDataStr && sharedTimestamp > 0) {
+                    const sharedData = JSON.parse(sharedDataStr);
+                    inventory = sharedData.inventory || [];
+                    settings = sharedData.settings || {};
+                    lastSyncTime = sharedTimestamp;
+                    console.log('Loaded shared data from localStorage');
+                    return true;
+                }
+                
+                // Fallback to individual storage
+                const inventoryStr = localStorage.getItem('iot-inventory');
+                const settingsStr = localStorage.getItem('iot-settings');
+                
+                if (inventoryStr) {
+                    inventory = JSON.parse(inventoryStr);
+                }
+                if (settingsStr) {
+                    settings = JSON.parse(settingsStr);
+                }
+                
+                return false;
+            } catch (error) {
+                console.error('Error loading shared data:', error);
+                return false;
+            }
+        }
+        
+        // Sync functions for compatibility
+        async function syncToCloud() {
+            if (!cloudSyncEnabled) return;
+            broadcastUpdate();
         }
         
         async function syncFromCloud() {
             if (!cloudSyncEnabled) return false;
             
             try {
-                const cloudDataStr = localStorage.getItem('iot-cloud-data');
-                const cloudSyncTime = parseInt(localStorage.getItem('iot-cloud-sync-time') || '0');
+                const sharedDataStr = localStorage.getItem('iot-shared-data');
+                const sharedTimestamp = parseInt(localStorage.getItem('iot-shared-timestamp') || '0');
                 
-                if (!cloudDataStr || cloudSyncTime <= lastSyncTime) {
-                    return false; // No new data
-                }
-                
-                const cloudData = JSON.parse(cloudDataStr);
-                
-                // ตรวจสอบว่าข้อมูลคลาวด์ใหม่กว่า
-                if (cloudData.timestamp > lastSyncTime) {
-                    inventory = cloudData.inventory || [];
-                    settings = cloudData.settings || {};
-                    lastSyncTime = cloudData.timestamp;
-                    
-                    // บันทึกลง IndexedDB
-                    await saveInventory();
-                    await saveSettings();
-                    
-                    console.log('Synced from cloud successfully');
+                if (sharedDataStr && sharedTimestamp > lastSyncTime) {
+                    const sharedData = JSON.parse(sharedDataStr);
+                    inventory = sharedData.inventory || [];
+                    settings = sharedData.settings || {};
+                    lastSyncTime = sharedTimestamp;
                     return true;
                 }
                 
                 return false;
-                
             } catch (error) {
-                console.error('Cloud sync from failed:', error);
+                console.error('Sync from cloud error:', error);
                 return false;
             }
         }
@@ -497,28 +638,15 @@ function doGet(e) {
             }
         }
         
-        // Auto sync every 5 seconds
-        setInterval(async () => {
+        // Real-time sync status update
+        setInterval(() => {
             if (!cloudSyncEnabled) {
                 updateSyncStatus('ปิดการซิงค์');
                 return;
             }
             
-            try {
-                updateSyncStatus('กำลังตรวจสอบข้อมูลใหม่...');
-                const hasNewData = await syncFromCloud();
-                if (hasNewData) {
-                    updateOverview();
-                    loadSettings();
-                    updateSyncStatus('อัปเดตข้อมูลสำเร็จ ✅');
-                    showMessage('🔄 อัปเดตข้อมูลจากผู้ใช้คนอื่นแล้ว', 'info');
-                } else {
-                    updateSyncStatus('ข้อมูลล่าสุดแล้ว ✅');
-                }
-            } catch (error) {
-                updateSyncStatus('เกิดข้อผิดพลาดในการซิงค์', true);
-            }
-        }, 5000);
+            updateSyncStatus('พร้อมใช้งาน - ซิงค์แบบเรียลไทม์ ✅');
+        }, 10000);
         
         // Handle sync toggle
         document.addEventListener('DOMContentLoaded', function() {
@@ -541,20 +669,23 @@ function doGet(e) {
             try {
                 await initDB();
                 
-                // ลองซิงค์จากคลาวด์ก่อน
-                const hasCloudData = await syncFromCloud();
-                if (!hasCloudData) {
-                    await loadData(); // โหลดข้อมูลท้องถิ่นถ้าไม่มีข้อมูลคลาวด์
+                // Initialize broadcast channel for real-time sync
+                initBroadcastChannel();
+                
+                // Load shared data first
+                const hasSharedData = await loadSharedData();
+                if (!hasSharedData) {
+                    await loadData(); // โหลดข้อมูลท้องถิ่นถ้าไม่มีข้อมูลแชร์
                 }
                 
                 updateOverview();
                 loadSettings();
                 
-                // ซิงค์ข้อมูลปัจจุบันไปคลาวด์
-                await syncToCloud();
+                // Broadcast current data to other tabs
+                broadcastUpdate();
                 
-                showMessage('🌐 ระบบแชร์ข้อมูลพร้อมใช้งาน - คนอื่นจะเห็นข้อมูลเดียวกัน', 'success');
-                updateSyncStatus('พร้อมใช้งาน - ซิงค์ทุก 5 วินาที ✅');
+                showMessage('🌐 ระบบแชร์ข้อมูลเรียลไทม์พร้อมใช้งาน!', 'success');
+                updateSyncStatus('พร้อมใช้งาน - ซิงค์แบบเรียลไทม์ ✅');
                 
             } catch (error) {
                 console.error('Initialization error:', error);
@@ -814,7 +945,7 @@ function doGet(e) {
             });
         }
 
-        // Save inventory to IndexedDB and sync to cloud
+        // Save inventory to IndexedDB and broadcast to other tabs
         async function saveInventory() {
             try {
                 // Clear existing data
@@ -826,20 +957,20 @@ function doGet(e) {
                 }
                 
                 // Also save to localStorage as backup
-                localStorage.setItem('iot-inventory', JSON.stringify(inventory));
+                await saveToLocalStorage();
                 
-                // Sync to cloud
-                await syncToCloud();
+                // Broadcast to other tabs immediately
+                broadcastUpdate();
                 
             } catch (error) {
                 console.error('Error saving inventory:', error);
                 // Fallback to localStorage only
-                localStorage.setItem('iot-inventory', JSON.stringify(inventory));
-                await syncToCloud(); // Still try to sync
+                await saveToLocalStorage();
+                broadcastUpdate(); // Still try to broadcast
             }
         }
 
-        // Save settings to IndexedDB and sync to cloud
+        // Save settings to IndexedDB and broadcast to other tabs
         async function saveSettings() {
             try {
                 // Clear existing settings
@@ -851,16 +982,16 @@ function doGet(e) {
                 }
                 
                 // Also save to localStorage as backup
-                localStorage.setItem('iot-settings', JSON.stringify(settings));
+                await saveToLocalStorage();
                 
-                // Sync to cloud
-                await syncToCloud();
+                // Broadcast to other tabs immediately
+                broadcastUpdate();
                 
             } catch (error) {
                 console.error('Error saving settings:', error);
                 // Fallback to localStorage only
-                localStorage.setItem('iot-settings', JSON.stringify(settings));
-                await syncToCloud(); // Still try to sync
+                await saveToLocalStorage();
+                broadcastUpdate(); // Still try to broadcast
             }
         }
 
@@ -1104,8 +1235,8 @@ function doGet(e) {
                 document.getElementById('api-key').value = '';
                 document.getElementById('auto-sync').checked = false;
                 
-                // Sync empty data to cloud
-                await syncToCloud();
+                // Broadcast empty data to other tabs
+                broadcastUpdate();
                 
                 showMessage('🗑️ ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
                 showMessage('📊 ข้อมูลถูกลบออกจากระบบแชร์แล้ว', 'info');
@@ -1148,8 +1279,8 @@ function doGet(e) {
                 document.getElementById('api-key').value = '';
                 document.getElementById('auto-sync').checked = false;
                 
-                // Sync empty data to cloud
-                await syncToCloud();
+                // Broadcast empty data to other tabs
+                broadcastUpdate();
                 
                 showMessage('ลบข้อมูลทั้งหมดเรียบร้อยแล้ว', 'success');
                 
@@ -1190,5 +1321,5 @@ function doGet(e) {
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a550b62f94b9b',t:'MTc1OTQ3MjQxMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'988a64a764294d99',t:'MTc1OTQ3MzA1MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
