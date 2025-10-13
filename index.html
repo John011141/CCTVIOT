@@ -3,1198 +3,1339 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบจัดการสต็อคสินค้าไอโอที</title>
+    <title>ระบบจัดการคลังสินค้า (Store Manager Pro)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        body {
-            box-sizing: border-box;
-        }
-        .scanner-input {
-            font-family: 'Courier New', monospace;
-        }
-        .fade-in {
-            animation: fadeIn 0.3s ease-in;
-        }
+        /* Custom Styles & Animation */
+        body { box-sizing: border-box; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .nav-item.active { background-color: #3b82f6; color: white; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
+            from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .pulse-success {
-            animation: pulseSuccess 0.5s ease-in-out;
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            margin-bottom: 24px;
         }
-        @keyframes pulseSuccess {
-            0% { background-color: rgb(34, 197, 94); }
-            50% { background-color: rgb(22, 163, 74); }
-            100% { background-color: rgb(34, 197, 94); }
+        
+        /* สไตล์สำหรับปุ่ม Category */
+        .category-button {
+            transition: all 0.2s;
+            white-space: nowrap;
         }
-        .deployment-highlight {
-            border: 2px solid #ef4444; /* Red border */
-            background-color: #fee2e2; /* Red background light */
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin-top: 1rem;
+        .category-button.selected {
+            background-color: #10b981; /* emerald-500 */
+            color: white;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.5);
+            border-color: #10b981;
+        }
+
+        /* Toast Notifications */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            animation: slideIn 0.3s ease-out, fadeOut 0.5s ease-in 3s forwards;
+            min-width: 250px;
+            max-width: 350px;
+            margin-top: 10px;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* Print Styles */
+        @media print {
+            body > *:not(.container) { display: none; }
+            .container { margin: 0; padding: 0; width: 100%; max-width: none; background: white; }
+            #inventory { display: block !important; }
+            .page { display: block !important; }
+            .card { box-shadow: none; border: 1px solid #ccc; }
+            #inventory .flex.justify-between.items-center.mb-6 { display: none; }
+            #inventoryPagination { display: none; }
+            table { font-size: 9pt; width: 100%; border-collapse: collapse; }
+            th, td { padding: 4px 6px; border: 1px solid #ddd; }
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
-    <div class="container mx-auto px-4 py-6">
-        <!-- Header -->
-        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">📦 ระบบจัดการสต็อคสินค้าไอโอที</h1>
-            <p class="text-gray-600">จัดการสินค้าเข้า-ออก พร้อมส่งข้อมูลไป Google Sheets</p>
-        </div>
+<body class="bg-gray-100 min-h-full font-sans">
+    
+    <div id="toast-container"></div>
 
-        <!-- Navigation Tabs -->
-        <div class="bg-white rounded-xl shadow-lg mb-6">
-            <div class="flex border-b">
-                <button onclick="showTab('overview')" id="tab-overview" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-blue-500 text-blue-600 bg-blue-50">
-                    📊 ภาพรวม
-                </button>
-                <button onclick="showTab('receive')" id="tab-receive" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
-                    📥 รับของเข้า
-                </button>
-                <button onclick="showTab('issue')" id="tab-issue" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
-                    📤 เบิกจ่าย
-                </button>
-                <button onclick="showTab('settings')" id="tab-settings" class="flex-1 py-4 px-6 text-center font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
-                    ⚙️ ตั้งค่า
-                </button>
+    <script>
+        // WEB_APP_URL จะถูกโหลดจาก Local Storage ในฟังก์ชัน loadSettings()
+        const DEFAULT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxgEUYIySWgu7hKF424sn4HaNcXy9lMhdPIqXNF5-qZSdGVFjCT8yLtz5_5d5M2pZtt/exec"; 
+    </script>
+
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-6">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-2">
+                    <div class="text-2xl text-blue-600">📦</div>
+                    <h1 class="text-xl font-extrabold text-gray-800">STORE MANAGER PRO</h1>
+                </div>
+                
+                <div class="flex space-x-1 text-sm">
+                    <button onclick="showPage('dashboard')" class="nav-item px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-100" id="nav-dashboard">
+                        📊 แดชบอร์ด
+                    </button>
+                    <button onclick="showPage('receive')" class="nav-item px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-100" id="nav-receive">
+                        📥 รับของเข้า
+                    </button>
+                    <button onclick="showPage('withdraw')" class="nav-item px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-100" id="nav-withdraw">
+                        📤 เบิกจ่าย
+                    </button>
+                    <button onclick="showPage('inventory')" class="nav-item px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-100" id="nav-inventory">
+                        📋 รายการสินค้า
+                    </button>
+                    <button onclick="showPage('settings')" class="nav-item px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-100" id="nav-settings">
+                        ⚙️ ตั้งค่า
+                    </button>
+                </div>
             </div>
         </div>
+    </nav>
 
-        <!-- Settings Tab -->
-        <div id="settings-tab" class="hidden">
-            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">🔗 เชื่อมต่อ Google Sheets</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Google Apps Script URL</label>
-                        <input type="url" id="sheets-url" placeholder="https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec" 
-                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+    <div class="container mx-auto px-6 py-8">
+        <div id="dashboard" class="page active">
+            <div class="card fade-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">📊 ภาพรวมคลังสินค้า</h2>
+                
+                <div class="grid md:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-blue-600 text-white p-6 rounded-xl shadow-lg">
+                        <p class="text-blue-100">รายการทั้งหมด</p>
+                        <p class="text-4xl font-extrabold mt-1" id="dash-total">0</p>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">API Key (ถ้ามี)</label>
-                        <input type="password" id="api-key" placeholder="ใส่ API Key ของ Google Sheets" 
-                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <div class="bg-emerald-500 text-white p-6 rounded-xl shadow-lg">
+                        <p class="text-emerald-100">คงเหลือในคลัง</p>
+                        <p class="text-4xl font-extrabold mt-1" id="dash-available">0</p>
                     </div>
-                    <div class="flex items-center">
-                        <input type="checkbox" id="auto-sync" class="mr-2">
-                        <label for="auto-sync" class="text-sm text-gray-700">ซิงค์อัตโนมัติเมื่อมีการเปลี่ยนแปลงข้อมูล</label>
+                    <div class="bg-orange-500 text-white p-6 rounded-xl shadow-lg">
+                        <p class="text-orange-100">เบิกจ่ายแล้ว</p>
+                        <p class="text-4xl font-extrabold mt-1" id="dash-withdrawn">0</p>
                     </div>
-                    <div class="flex gap-4">
-                        <button onclick="testConnection()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-                            🔍 ทดสอบการเชื่อมต่อ
-                        </button>
-                        <button onclick="showDeleteConfirmModal()" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-                            🗑️ ล้างข้อมูลทั้งหมด
-                        </button>
+                    <div class="bg-gray-700 text-white p-6 rounded-xl shadow-lg">
+                        <p class="text-gray-300">หมวดหมู่ทั้งหมด</p>
+                        <p class="text-4xl font-extrabold mt-1" id="dash-categories">0</p>
+                    </div>
+                </div>
+
+                <div class="grid lg:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-xl font-semibold mb-4 text-gray-800">🚀 รายการที่ต้องดำเนินการ</h3>
+                        <div class="space-y-3">
+                            <button onclick="showPage('receive')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl transition-colors flex items-center justify-center space-x-2 font-medium">
+                                <span>📥</span>
+                                <span>รับของเข้าคลัง</span>
+                            </button>
+                            <button onclick="showPage('withdraw')" class="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 px-4 rounded-xl transition-colors flex items-center justify-center space-x-2 font-medium">
+                                <span>📤</span>
+                                <span>เบิกจ่ายสินค้า</span>
+                            </button>
+                        </div>
                     </div>
                     
-                    <!-- UPDATED DEPLOYMENT INSTRUCTIONS WITH HIGHLIGHT -->
-                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <h3 class="font-medium text-yellow-800 mb-2">📋 วิธีการตั้งค่า Google Apps Script:</h3>
-                        <ol class="text-sm text-yellow-700 space-y-1 list-decimal list-inside">
-                            <li>สร้าง Google Sheets ใหม่</li>
-                            <li>ไปที่ Extensions → Apps Script</li>
-                            <li>วาง Code ด้านล่างใน Apps Script</li>
-                            <li>**สำคัญมาก:** Deploy เป็น Web App โดยตั้งค่า "Execute as: Me" และ "Who has access: Anyone"</li>
-                            <li>**สำคัญมาก:** คัดลอก URL ที่ได้จากการ Deploy แล้วนำมาใส่ด้านบน</li>
-                        </ol>
-                        <div class="mt-3 p-3 bg-gray-100 rounded text-xs overflow-x-auto">
-                            <strong>Google Apps Script Code สำหรับแชร์ข้อมูลข้ามเครื่อง (คัดลอกทั้งหมด):</strong><br>
-                            <pre class="mt-2 text-xs"><code>// Global variable to store shared data
-var SHARED_DATA_KEY = 'IOT_SHARED_DATA';
-
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    
-    if (data.action === 'test') {
-      return ContentService
-        .createTextOutput(JSON.stringify({success: true, message: 'Connection OK'}))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // Save shared data for cross-device sync
-    if (data.action === 'saveData') {
-      const properties = PropertiesService.getScriptProperties();
-      properties.setProperty(SHARED_DATA_KEY, JSON.stringify({
-        data: data.data,
-        timestamp: data.timestamp || Date.now()
-      }));
-      
-      return ContentService
-        .createTextOutput(JSON.stringify({success: true, message: 'Data saved to cloud'}))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // Update inventory in spreadsheet
-    if (data.action === 'updateInventory' && data.data && data.data.length > 0) {
-      const sheet = SpreadsheetApp.getActiveSheet();
-      
-      // Clear existing data
-      sheet.clear();
-      
-      // Set headers
-      const headers = Object.keys(data.data[0]);
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      
-      // Set data
-      const rows = data.data.map(item => headers.map(h => item[h] || ''));
-      if (rows.length > 0) {
-        sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
-      }
-      
-      return ContentService
-        .createTextOutput(JSON.stringify({success: true, rows: rows.length}))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({success: false, error: 'Invalid action'}))
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    return ContentService
-      .createTextOutput(JSON.stringify({success: false, error: error.toString()}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function doGet(e) {
-  try {
-    const action = e.parameter.action;
-    
-    // Get shared data for cross-device sync
-    if (action === 'getData') {
-      const properties = PropertiesService.getScriptProperties();
-      const sharedDataStr = properties.getProperty(SHARED_DATA_KEY);
-      
-      if (sharedDataStr) {
-        const sharedData = JSON.parse(sharedDataStr);
-        return ContentService
-          .createTextOutput(JSON.stringify({
-            success: true,
-            data: sharedData.data,
-            timestamp: sharedData.timestamp
-          }))
-          .setMimeType(ContentService.MimeType.JSON);
-      } else {
-        return ContentService
-          .createTextOutput(JSON.stringify({
-            success: true,
-            data: { inventory: [], settings: {} },
-            timestamp: 0
-          }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-    }
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({success: true, message: 'IoT Inventory API Ready'}))
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    return ContentService
-      .createTextOutput(JSON.stringify({success: false, error: error.toString()}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}</code></pre>
-                        </div>
-                        <div class="deployment-highlight">
-                            <h3 class="font-bold text-red-600 mb-2 text-lg">🚨 ขั้นตอนการ Deploy ที่ผิดพลาดบ่อย:</h3>
-                            <p class="text-sm text-red-700 space-y-1">
-                                1. วาง Code ทั้งหมด → Save<br>
-                                2. คลิก **Deploy** → **New deployment** (หรือ Manage deployment → Edit)<br>
-                                3. Type: **Web app**<br>
-                                4. Execute as: **Me** (ตัวฉัน)<br>
-                                5. Who has access: **Anyone** (ทุกคน)<br>
-                                6. **Deploy** → **คัดลอก URL** (Deployment ID) มาใส่ในช่องด้านบน
-                            </p>
-                            <p class="text-xs text-red-500 mt-2">**หากแก้ไขโค้ดต้องทำซ้ำตั้งแต่ข้อ 2 เพื่อให้ได้ URL ที่ใช้งานได้ครับ**</p>
-                            <p class="text-xs text-red-500 mt-2">**หากคุณรันจากเครื่อง (http://127.0.0.1) และติด CORS error ตอนนี้ได้ทำการปรับโค้ดฝั่ง Client ให้เป็น Simple Request แล้ว ซึ่งช่วยแก้ปัญหานี้ได้ครับ**</p>
-                        </div>
-                    </div>
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                        <h3 class="font-medium text-blue-800 mb-2">💾 ระบบเก็บข้อมูลและการแชร์</h3>
-                        <div class="text-sm text-blue-700 space-y-1">
-                            <p>✅ <strong>ข้อมูลถาวร:</strong> ใช้ IndexedDB เก็บข้อมูลในเครื่อง - ไม่หายแม้ปิดเบราว์เซอร์</p>
-                            <p>🔄 <strong>ระบบสำรอง:</strong> มี localStorage เป็นตัวสำรองกรณี IndexedDB ไม่ทำงาน</p>
-                            <p>🌐 <strong>แชร์ข้อมูลเรียลไทม์:</strong> ใช้ BroadcastChannel - คนอื่นเห็นข้อมูลทันทีที่มีการเปลี่ยนแปลง</p>
-                            <p>⚡ <strong>อัปเดตทันที:</strong> เมื่อมีคนเพิ่ม/เบิกสินค้า ทุกแท็บจะอัปเดตในทันที (ไม่ต้องรอ)</p>
-                            <p id="sync-status" class="font-medium">🔄 <strong>สถานะ:</strong> กำลังซิงค์...</p>
-                        </div>
-                        <div class="mt-3 flex items-center">
-                            <input type="checkbox" id="cloud-sync-toggle" checked class="mr-2">
-                            <label for="cloud-sync-toggle" class="text-sm text-blue-700">เปิดการซิงค์ข้อมูลเรียลไทม์</label>
+                    <div class="bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-xl font-semibold mb-4 text-gray-800">📈 รายการล่าสุด (5 รายการ)</h3>
+                        <div id="recentItems" class="space-y-2">
+                            <p class="text-sm text-gray-500">ไม่มีรายการล่าสุด</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Overview Tab -->
-        <div id="overview-tab">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
-                    <div class="flex items-center justify-between">
+        <div id="receive" class="page">
+            <div class="card fade-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">📥 รับของเข้าคลังสินค้า</h2>
+                
+                <form onsubmit="addItems(event)" class="space-y-6">
+                    <div class="grid lg:grid-cols-2 gap-8">
                         <div>
-                            <p class="text-blue-100">สินค้าทั้งหมด</p>
-                            <p class="text-3xl font-bold" id="total-items">0</p>
+                            <label for="serialNumbers" class="block text-lg font-semibold text-gray-700 mb-3">📝 Serial Numbers (SN)</label>
+                            <textarea id="serialNumbers" rows="10" 
+                                        placeholder="ใส่ Serial Number แต่ละบรรทัด&#10;&#10;ตัวอย่าง:&#10;SN-PRT-001&#10;SN-PRT-002&#10;SN-PRT-003" 
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-base" required></textarea>
+                            <p class="text-sm text-gray-500 mt-2">💡 ใส่ SN หลายตัวได้ โดยแยกแต่ละบรรทัด</p>
                         </div>
-                        <div class="text-4xl">📦</div>
-                    </div>
-                </div>
-                <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-green-100">คงเหลือในสต็อค</p>
-                            <p class="text-3xl font-bold" id="stock-items">0</p>
-                        </div>
-                        <div class="text-4xl">✅</div>
-                    </div>
-                </div>
-                <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-orange-100">เบิกจ่ายแล้ว</p>
-                            <p class="text-3xl font-bold" id="issued-items">0</p>
-                        </div>
-                        <div class="text-4xl">📤</div>
-                    </div>
-                </div>
-            </div>
+                        
+                        <div class="space-y-6">
+                            
+                            <div class="space-y-3">
+                                <label class="block text-lg font-semibold text-gray-700 mb-3">🏷️ เลือกหมวดหมู่สินค้า</label>
+                                
+                                <div id="categorySelection" class="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 rounded-lg border min-h-[50px]">
+                                    <p class="text-sm text-gray-500 w-full">กำลังโหลดหมวดหมู่...</p>
+                                </div>
 
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-bold text-gray-800">📋 รายการสินค้าล่าสุด</h3>
-                    <div class="flex gap-2">
-                        <button onclick="exportToGoogleSheets()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                            📊 ส่งไป Google Sheets
+                                <div class="flex items-center space-x-3">
+                                    <input type="text" id="newCategoryInput" 
+                                            placeholder="เพิ่มหมวดหมู่ใหม่" 
+                                            class="flex-grow px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <button type="button" onclick="addNewCategory()" 
+                                            class="bg-gray-700 hover:bg-gray-800 text-white px-4 py-3 rounded-xl transition-colors font-medium text-sm whitespace-nowrap">
+                                        + เพิ่ม
+                                    </button>
+                                </div>
+                                <input type="hidden" id="selectedCategory" required data-validation-message="กรุณาเลือกหมวดหมู่">
+                            </div>
+                            
+                            <div class="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                                <h4 class="font-bold text-blue-800 mb-2 text-lg">📋 ข้อมูลการรับเข้า</h4>
+                                <p class="text-sm text-blue-600">📅 วันที่: <span id="currentDate" class="font-medium"></span></p>
+                                <p class="text-sm text-blue-600">👤 ผู้รับเข้า: ระบบอัตโนมัติ</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-4 pt-4">
+                        <button type="button" onclick="clearReceiveForm()" 
+                                class="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-medium">
+                            ล้างข้อมูล
                         </button>
-                        <button onclick="showDeleteConfirmModal()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                            🗑️ ลบข้อมูลทั้งหมด
+                        <button type="submit" id="receiveSubmitBtn"
+                                class="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-colors font-bold shadow-lg shadow-emerald-200 flex items-center justify-center space-x-2">
+                            <span>✅ ยืนยันรับเข้าคลัง</span>
+                            <i id="receiveSpinner" class="fas fa-circle-notch fa-spin hidden"></i>
                         </button>
                     </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="withdraw" class="page">
+            <div class="card fade-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">📤 เบิกจ่ายสินค้า</h2>
+                
+                <form onsubmit="withdrawItems(event)" class="space-y-6">
+                    <div class="grid lg:grid-cols-2 gap-8">
+                        <div>
+                            <label for="withdrawSN" class="block text-lg font-semibold text-gray-700 mb-3">🔍 Serial Numbers ที่ต้องการเบิก</label>
+                            <textarea id="withdrawSN" rows="8" 
+                                        placeholder="ใส่ Serial Number ที่ต้องการเบิก&#10;&#10;ตัวอย่าง:&#10;SN-PRT-001&#10;SN-PRT-002" 
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-base" required></textarea>
+                            <button type="button" onclick="checkAvailability()" 
+                                        class="mt-2 text-sm text-orange-600 hover:text-orange-700 underline font-medium">
+                                🔍 ตรวจสอบความพร้อม
+                            </button>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label for="technicianName" class="block text-lg font-semibold text-gray-700 mb-3">👤 ชื่อผู้เบิก / ช่าง (ID พนักงาน)</label>
+                                <input type="text" id="technicianName" 
+                                            placeholder="ชื่อ-นามสกุล หรือ ID พนักงานผู้เบิก" 
+                                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+                            </div>
+                            
+                            <div class="bg-orange-50 p-4 rounded-xl border border-orange-200">
+                                <h4 class="font-bold text-orange-800 mb-2 text-lg">📋 ข้อมูลการเบิก</h4>
+                                <p class="text-sm text-orange-600">📅 วันที่เบิก: <span id="withdrawDate" class="font-medium"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="availabilityCheck" class="hidden bg-gray-50 p-4 rounded-xl border border-gray-300">
+                        <h4 class="font-bold text-gray-800 mb-2">📊 ผลการตรวจสอบความพร้อม</h4>
+                        <div id="checkResults" class="space-y-1"></div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-4 pt-4">
+                        <button type="button" onclick="clearWithdrawForm()" 
+                                class="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-medium">
+                            ล้างข้อมูล
+                        </button>
+                        <button type="submit" id="withdrawSubmitBtn"
+                                class="px-8 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl transition-colors font-bold shadow-lg shadow-orange-200 flex items-center justify-center space-x-2">
+                            <span>✅ ยืนยันเบิกจ่าย</span>
+                            <i id="withdrawSpinner" class="fas fa-circle-notch fa-spin hidden"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="inventory" class="page">
+            <div class="card fade-in">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">📋 รายการสินค้าทั้งหมด</h2>
+                    <div class="flex space-x-3">
+                        <button onclick="showAddItemModal()" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm transition-colors flex items-center space-x-1 font-medium shadow-md">
+                            <span>➕</span>
+                            <span>เพิ่มรายการเดียว</span>
+                        </button>
+                        <select id="statusFilter" onchange="filterInventory()" 
+                                class="px-4 py-2 border border-gray-300 rounded-xl text-sm">
+                            <option value="">ทุกสถานะ</option>
+                            <option value="Available">คงเหลือ</option>
+                            <option value="Withdrawn">เบิกแล้ว</option>
+                        </select>
+                        <input type="text" id="searchSN" placeholder="ค้นหา SN หรือ หมวดหมู่..." 
+                               onkeyup="filterInventory()"
+                               class="px-4 py-2 border border-gray-300 rounded-xl text-sm w-56">
+                    </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">SN</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">สินค้า</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">สถานะ</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-700">วันที่</th>
+                
+                <div class="overflow-x-auto rounded-lg border">
+                    <table class="w-full border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 border-b border-gray-200">
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700 w-[20%]">Serial Number</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700 w-[20%]">หมวดหมู่</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700 w-[10%]">วันที่รับเข้า</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700 w-[10%]">สถานะ</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700 w-[20%]">ผู้เบิก (ID พนักงาน)</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700 w-[10%]">วันที่เบิก</th>
+                                <th class="px-4 py-3 text-center font-semibold text-gray-700 w-[10%]">จัดการ</th>
                             </tr>
                         </thead>
-                        <tbody id="items-table" class="divide-y divide-gray-200">
+                        <tbody id="inventoryTable">
+                            <tr id="empty-inventory-row" class="text-center"><td colspan="7" class="py-4 text-gray-500">กำลังโหลด/ไม่มีรายการสินค้าในคลัง</td></tr>
                         </tbody>
                     </table>
                 </div>
-                <!-- Pagination Controls: เพิ่มส่วนนี้สำหรับการควบคุมการแบ่งหน้า -->
-                <div class="flex justify-center items-center mt-6 space-x-2" id="pagination-controls">
-                    <button onclick="changePage(-1)" id="prev-page-btn" class="px-4 py-2 border rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                        < ย้อนกลับ
-                    </button>
-                    <span id="page-info" class="text-sm font-medium text-gray-600">หน้า 1 จาก 1</span>
-                    <button onclick="changePage(1)" id="next-page-btn" class="px-4 py-2 border rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                        หน้าถัดไป >
-                    </button>
-                </div>
+                
+                <div id="inventoryPagination" class="mt-6 flex justify-center">
+                    </div>
             </div>
         </div>
 
-        <!-- Receive Tab -->
-        <div id="receive-tab" class="hidden">
-            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">📥 รับของเข้าสต็อค</h2>
-                <form onsubmit="receiveItem(event)" class="space-y-4">
-                    <div class="grid grid-cols-1 gap-4">
+        <div id="settings" class="page">
+            <div class="space-y-8 fade-in">
+                
+                <div class="card border-t-4 border-blue-600">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">☁️ Google Sheets Sync (Apps Script)</h2>
+                    <p class="text-sm text-gray-600 mb-4">
+                        การเชื่อมต่อนี้ใช้ **Google Apps Script Web App URL** ในการรับส่งข้อมูลโดยตรง <br>
+                        *ระบบจะซิงค์ข้อมูลไปยังชีท 'บันทึกรับเข้า' และ 'บันทึกเบิกจ่าย' ทันทีที่ทำรายการ*
+                    </p>
+
+                    <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">🔍 แสกน/ใส่ Serial Number (หลายตัว)</label>
-                            <textarea id="receive-sn" placeholder="แสกนหรือพิมพ์ SN (แต่ละบรรทัดคือ SN หนึ่งตัว)&#10;เช่น:&#10;SN001&#10;SN002&#10;SN003" rows="4"
-                                   class="scanner-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"></textarea>
-                            <p class="text-sm text-gray-500 mt-1">💡 ใส่ Serial Number แต่ละตัวในบรรทัดใหม่ หรือคั่นด้วยเครื่องหมายจุลภาค</p>
+                            <label for="webAppUrl" class="block text-sm font-medium text-gray-700 mb-2">Google Apps Script Web App URL</label>
+                            <input type="url" id="webAppUrl" placeholder="ใส่ URL ที่ได้จากการ Deploy Apps Script" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm" required>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">📱 ชื่อสินค้า</label>
-                            <select id="receive-product" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                <option value="">เลือกสินค้า</option>
-                                <option value="กล้อง CCTV">กล้อง CCTV</option>
-                                <option value="SIM">SIM</option>
-                            </select>
+                        <div id="connectionStatus" class="text-sm font-medium">
+                            <span class="text-gray-500">สถานะ: ยังไม่ได้บันทึก URL</span>
                         </div>
                     </div>
-                    <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 px-6 rounded-lg font-medium transition-colors">
-                        ✅ บันทึกรับของเข้า
-                    </button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Issue Tab -->
-        <div id="issue-tab" class="hidden">
-            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">📤 เบิกจ่ายสินค้า</h2>
-                <form onsubmit="issueItem(event)" class="space-y-4">
-                    <div class="grid grid-cols-1 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">🔍 แสกน/ใส่ Serial Number (หลายตัว)</label>
-                            <textarea id="issue-sn" placeholder="แสกนหรือพิมพ์ SN (แต่ละบรรทัดคือ SN หนึ่งตัว)&#10;เช่น:&#10;SN001&#10;SN002&#10;SN003" rows="4"
-                                   class="scanner-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-lg"></textarea>
-                            <p class="text-sm text-gray-500 mt-1">💡 ใส่ Serial Number แต่ละตัวในบรรทัดใหม่ หรือคั่นด้วยเครื่องหมายจุลภาค</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">👨‍🔧 ชื่อช่าง</label>
-                            <input type="text" id="issue-technician" placeholder="ชื่อช่างที่เบิก" 
-                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                        </div>
+                    
+                    <div class="flex space-x-4 mt-6">
+                        <button onclick="saveWebAppUrl()" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl transition-colors font-medium shadow-md">
+                            💾 บันทึก URL
+                        </button>
+                        <button onclick="testGoogleSheetsConnection()" 
+                                class="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-xl transition-colors font-medium shadow-md">
+                            🔍 ทดสอบการเชื่อมต่อ
+                        </button>
                     </div>
-
-                    <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-lg font-medium transition-colors">
-                        📤 บันทึกเบิกจ่าย
-                    </button>
-                </form>
-            </div>
-        </div>
-
-
-
-        <!-- Success/Error Messages -->
-        <div id="message-container" class="fixed top-4 right-4 z-50"></div>
-        
-        <!-- Delete Confirmation Modal -->
-        <div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-            <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
-                <div class="text-center mb-6">
-                    <div class="text-6xl mb-4">⚠️</div>
-                    <h3 class="text-xl font-bold text-red-600 mb-2">ยืนยันการลบข้อมูลทั้งหมด</h3>
-                    <p class="text-gray-600">การกระทำนี้จะลบข้อมูลสินค้าทั้งหมดและไม่สามารถย้อนกลับได้</p>
                 </div>
-                
-                <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">🔐 ใส่รหัสผ่านเพื่อยืนยัน</label>
-                    <!-- UPDATED PLACEHOLDER FOR CLARITY -->
-                    <input type="password" id="delete-password" placeholder="ใส่รหัสผ่าน John19195" 
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-center text-lg">
-                    <p class="text-xs text-gray-500 mt-1">รหัสผ่านสำหรับการลบข้อมูล</p>
+
+                <div class="card border-t-4 border-gray-700">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">🗂️ การจัดการและส่งออกข้อมูล</h2>
+                    <div class="grid md:grid-cols-3 gap-4">
+                        <button onclick="exportToCSV()" 
+                                class="bg-gray-700 hover:bg-gray-800 text-white px-6 py-3 rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
+                            <span>📊</span>
+                            <span>ส่งออก CSV</span>
+                        </button>
+                        <button onclick="backupData()" 
+                                class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
+                            <span>💾</span>
+                            <span>สำรองข้อมูล (JSON)</span>
+                        </button>
+                        <button onclick="clearAllData()" 
+                                class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
+                            <span>🗑️</span>
+                            <span>ล้างข้อมูลทั้งหมด</span>
+                        </button>
+                    </div>
                 </div>
-                
-                <div class="flex gap-3">
-                    <button onclick="hideDeleteConfirmModal()" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 px-4 rounded-lg font-medium transition-colors">
-                        ❌ ยกเลิก
-                    </button>
-                    <button onclick="confirmDeleteAllData()" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-lg font-medium transition-colors">
-                        🗑️ ลบทั้งหมด
+
+                <div class="card border-t-4 border-indigo-600">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">🖨️ พิมพ์รายงาน</h2>
+                    <button onclick="printReport()" 
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl transition-colors font-medium flex items-center justify-center space-x-2 w-full md:w-auto">
+                        <span>🖨️</span>
+                        <span>พิมพ์รายการสินค้าทั้งหมด</span>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script>
-        // Data storage - ใช้ระบบคลาวด์สำหรับแชร์ข้อมูล
-        let inventory = [];
-        let settings = {};
-        let db;
-        let cloudSyncEnabled = true;
-        let lastSyncTime = 0;
-
-        // Pagination variables
-        let currentPage = 1;
-        const itemsPerPage = 20;
-
-        // Initialize IndexedDB
-        async function initDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open('IoTInventoryDB', 1);
-                
-                request.onerror = () => reject(request.error);
-                request.onsuccess = () => {
-                    db = request.result;
-                    resolve(db);
-                };
-                
-                request.onupgradeneeded = (event) => {
-                    db = event.target.result;
-                    
-                    // Create inventory store
-                    if (!db.objectStoreNames.contains('inventory')) {
-                        const inventoryStore = db.createObjectStore('inventory', { keyPath: 'id' });
-                        inventoryStore.createIndex('sn', 'sn', { unique: true });
-                        inventoryStore.createIndex('status', 'status', { unique: false });
-                    }
-                    
-                    // Create settings store
-                    if (!db.objectStoreNames.contains('settings')) {
-                        db.createObjectStore('settings', { keyPath: 'key' });
-                    }
-                };
-            });
-        }
-
-        // Load data from IndexedDB
-        async function loadData() {
-            try {
-                // Load inventory
-                const inventoryData = await getAllFromStore('inventory');
-                inventory = inventoryData || [];
-                
-                // Load settings
-                const settingsData = await getAllFromStore('settings');
-                settings = {};
-                settingsData.forEach(item => {
-                    settings[item.key] = item.value;
-                });
-                
-                // Fallback to localStorage if IndexedDB is empty
-                if (inventory.length === 0) {
-                    const localInventory = localStorage.getItem('iot-inventory');
-                    if (localInventory) {
-                        inventory = JSON.parse(localInventory);
-                        // Save to IndexedDB for future use
-                        await Promise.all(inventory.map(item => saveToStore('inventory', item))); 
-                    }
-                }
-                
-                if (Object.keys(settings).length === 0) {
-                    const localSettings = localStorage.getItem('iot-settings');
-                    if (localSettings) {
-                        settings = JSON.parse(localSettings);
-                        // Save to IndexedDB for future use
-                        await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] }))); 
-                    }
-                }
-                
-            } catch (error) {
-                console.error('Error loading data:', error);
-                // Fallback to localStorage
-                inventory = JSON.parse(localStorage.getItem('iot-inventory') || '[]');
-                settings = JSON.parse(localStorage.getItem('iot-settings') || '{}');
-            }
-        }
-
-        // Get all data from a store
-        function getAllFromStore(storeName) {
-            return new Promise((resolve, reject) => {
-                if (!db) return resolve([]);
-                const transaction = db.transaction([storeName], 'readonly');
-                const store = transaction.objectStore(storeName);
-                const request = store.getAll();
-                
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        }
-
-        // Save data to IndexedDB store
-        function saveToStore(storeName, data) {
-            return new Promise((resolve, reject) => {
-                if (!db) return resolve();
-                const transaction = db.transaction([storeName], 'readwrite');
-                const store = transaction.objectStore(storeName);
-                const request = store.put(data);
-                
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        }
-
-        // Clear store
-        function clearStore(storeName) {
-            return new Promise((resolve, reject) => {
-                if (!db) return resolve();
-                const transaction = db.transaction([storeName], 'readwrite');
-                const store = transaction.objectStore(storeName);
-                const request = store.clear();
-                
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-        }
-
-        // Cloud sync functions - ใช้ระบบแชร์ข้อมูลข้ามเครื่องผ่าน Google Apps Script
-        let isUpdatingFromSync = false;
-        let syncCheckInterval;
-        let cloudSyncUrl = '';
-        
-        // Initialize sync system
-        function initSyncSystem() {
-            // Check for updates every 5 seconds
-            syncCheckInterval = setInterval(checkForCloudUpdates, 5000);
+    <div id="addItemModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-auto shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">➕ เพิ่มรายการสินค้า (1 ชิ้น)</h3>
+                <button type="button" onclick="hideAddItemModal()" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+            </div>
             
-            // Load cloud sync URL from settings
-            cloudSyncUrl = settings.sheetsUrl || '';
-            
-            // Setup listener for settings change (e.g., cloud sync toggle)
-            document.getElementById('cloud-sync-toggle').addEventListener('change', saveSettings);
-            document.getElementById('sheets-url').addEventListener('change', saveSettings);
-            document.getElementById('api-key').addEventListener('change', saveSettings);
-            document.getElementById('auto-sync').addEventListener('change', saveSettings);
-
-            console.log('Cloud sync system initialized');
-        }
-        
-        // Check for updates from cloud
-        async function checkForCloudUpdates() {
-            if (isUpdatingFromSync || !cloudSyncEnabled || !cloudSyncUrl) return;
-            
-            try {
-                updateSyncStatus('กำลังตรวจสอบ... 🔄');
-                
-                // Get data from cloud
-                const response = await fetch(cloudSyncUrl + '?action=getData&timestamp=' + Date.now(), {
-                    method: 'GET',
-                    mode: 'cors'
-                });
-                
-                if (response.ok) {
-                    const cloudData = await response.json();
-                    
-                    if (cloudData.success && cloudData.data && cloudData.timestamp > lastSyncTime) {
-                        isUpdatingFromSync = true;
-                        
-                        inventory = cloudData.data.inventory || [];
-                        settings = { ...settings, ...cloudData.data.settings };
-                        lastSyncTime = cloudData.timestamp;
-
-                        // Save new data to IndexedDB locally
-                        await clearStore('inventory');
-                        await Promise.all(inventory.map(item => saveToStore('inventory', item)));
-                        await clearStore('settings');
-                        await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] })));
-                        
-                        // Update UI
-                        updateOverview();
-                        loadSettings();
-                        
-                        console.log('Updated from cloud:', inventory.length, 'items');
-                        updateSyncStatus('อัปเดตจากคลาวด์สำเร็จ ✅');
-                        
-                        isUpdatingFromSync = false;
-                    } else {
-                         updateSyncStatus('สถานะ: พร้อมใช้งาน 🟢');
-                    }
-                } else {
-                     updateSyncStatus('สถานะ: พร้อมใช้งาน 🟢');
-                }
-            } catch (error) {
-                console.error('Cloud check error, reverting to local:', error);
-                updateSyncStatus('ซิงค์ท้องถิ่นเท่านั้น 📱', 'text-orange-700');
-                // Fallback is handled by general loadData/loadSharedData mechanism on startup
-            }
-        }
-        
-        
-        // Generate unique client ID (Not strictly used for sync logic but good practice)
-        function getClientId() {
-            let clientId = localStorage.getItem('iot-client-id');
-            if (!clientId) {
-                clientId = 'client-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('iot-client-id', clientId);
-            }
-            return clientId;
-        }
-        
-        // Share data to cloud and localStorage (Called after every successful CUD operation)
-        async function shareUpdate() {
-            if (isUpdatingFromSync) return;
-            
-            const timestamp = Date.now();
-            const sharedData = {
-                inventory: inventory,
-                settings: settings,
-                clientId: getClientId(),
-                timestamp: timestamp
-            };
-            
-            // Update timestamp
-            lastSyncTime = timestamp;
-            
-            // Save to localStorage as a fallback / immediate cross-tab check
-            try {
-                localStorage.setItem('iot-shared-data', JSON.stringify(sharedData));
-                localStorage.setItem('iot-shared-timestamp', timestamp.toString());
-            } catch (error) {
-                console.error('localStorage share error:', error);
-            }
-            
-            // Save to cloud for cross-device sync
-            if (cloudSyncEnabled && cloudSyncUrl) {
-                try {
-                    // Using no-cors here because Google Apps Script (GAS) Web App deployment defaults
-                    // prevent us from inspecting the JSON response directly from a POST if not configured carefully.
-                    // This is for fire-and-forget sync.
-                    await fetch(cloudSyncUrl, {
-                        method: 'POST',
-                        mode: 'no-cors', 
-                        // NOTE: Removed 'Content-Type: application/json' header to ensure a "Simple Request"
-                        // is made, bypassing the preflight OPTIONS check that fails with GAS on localhost.
-                        body: JSON.stringify({
-                            action: 'saveData',
-                            data: sharedData,
-                            timestamp: timestamp
-                        })
-                    });
-                    
-                    console.log('Shared update to cloud:', inventory.length, 'items');
-                    updateSyncStatus('ซิงค์ไปคลาวด์สำเร็จ ☁️');
-                } catch (error) {
-                    console.error('Cloud share error:', error);
-                    updateSyncStatus('ซิงค์ท้องถิ่นเท่านั้น 📱', 'text-orange-700');
-                }
-            }
-        }
-        
-        // Load shared data from cloud first, then IndexedDB
-        async function loadSharedData() {
-            // Priority 1: Cloud
-            if (cloudSyncUrl) {
-                try {
-                    const response = await fetch(cloudSyncUrl + '?action=getData&timestamp=' + Date.now(), {
-                        method: 'GET',
-                        mode: 'cors'
-                    });
-                    
-                    if (response.ok) {
-                        const cloudData = await response.json();
-                        
-                        if (cloudData.success && cloudData.data) {
-                            inventory = cloudData.data.inventory || [];
-                            settings = cloudData.data.settings || {};
-                            lastSyncTime = cloudData.timestamp;
-                            
-                            // Save new data to IndexedDB locally
-                            await clearStore('inventory');
-                            await Promise.all(inventory.map(item => saveToStore('inventory', item)));
-                            await clearStore('settings');
-                            await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] })));
-
-                            updateOverview();
-                            loadSettings();
-                            
-                            console.log('Loaded from cloud:', inventory.length, 'items');
-                            updateSyncStatus('โหลดจากคลาวด์สำเร็จ ☁️');
-                        }
-                    } else {
-                        throw new Error('HTTP Error: ' + response.status);
-                    }
-                } catch (error) {
-                    console.error('Cloud load error, trying local storage:', error);
-                    updateSyncStatus('ซิงค์ท้องถิ่นเท่านั้น 📱', 'text-orange-700');
-                    // Fall through to local load
-                    await loadData();
-                }
-            } else {
-                // Priority 2: IndexedDB / Local Storage
-                await loadData();
-            }
-            // Update UI after loading is complete
-            updateOverview();
-            loadSettings();
-        }
-
-        // --- Core Inventory Logic ---
-
-        // Helper to normalize SNs from textarea
-        function normalizeSNs(snText) {
-            return snText
-                .split(/[\n,]/) // Split by newline or comma
-                .map(sn => sn.trim())
-                .filter(sn => sn.length > 0);
-        }
-
-        function generateUniqueId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-        }
-        
-        // --- Tab Management ---
-        function showTab(tabName) {
-            ['overview', 'receive', 'issue', 'settings'].forEach(name => {
-                const tab = document.getElementById(`${name}-tab`);
-                const btn = document.getElementById(`tab-${name}`);
-                if (name === tabName) {
-                    tab.classList.remove('hidden');
-                    btn.classList.add('border-blue-500', 'text-blue-600', 'bg-blue-50');
-                    btn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700');
-                } else {
-                    tab.classList.add('hidden');
-                    btn.classList.remove('border-blue-500', 'text-blue-600', 'bg-blue-50');
-                    btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700');
-                }
-            });
-            if (tabName === 'overview') {
-                updateOverview();
-            }
-            if (tabName === 'settings') {
-                loadSettings();
-            }
-        }
-
-        // --- UI Update & Rendering ---
-        
-        function updateOverview() {
-            // Update summary statistics
-            const totalItems = inventory.length;
-            const issuedItems = inventory.filter(item => item.status === 'เบิกจ่ายแล้ว').length;
-            const stockItems = totalItems - issuedItems;
-
-            document.getElementById('total-items').textContent = totalItems;
-            document.getElementById('stock-items').textContent = stockItems;
-            document.getElementById('issued-items').textContent = issuedItems;
-            
-            // Render table
-            renderTable();
-        }
-
-        function renderTable() {
-            const tableBody = document.getElementById('items-table');
-            tableBody.innerHTML = '';
-            
-            // Sort inventory by date descending (latest first)
-            const sortedInventory = [...inventory].sort((a, b) => b.timestamp - a.timestamp);
-            
-            // Calculate total pages
-            const totalItems = sortedInventory.length;
-            const totalPages = Math.ceil(totalItems / itemsPerPage);
-            
-            // Adjust current page if necessary
-            if (currentPage > totalPages && totalPages > 0) {
-                currentPage = totalPages;
-            } else if (totalPages === 0) {
-                currentPage = 1;
-            }
-
-            // Slice data for the current page
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const paginatedItems = sortedInventory.slice(startIndex, endIndex);
-
-            paginatedItems.forEach(item => {
-                const statusClass = item.status === 'เบิกจ่ายแล้ว' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800';
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50 transition-colors';
-                row.innerHTML = `
-                    <td class="px-4 py-3 font-medium text-gray-900">${item.sn}</td>
-                    <td class="px-4 py-3">${item.product || 'N/A'}</td>
-                    <td class="px-4 py-3">
-                        <span class="inline-flex items-center px-3 py-0.5 rounded-full text-xs font-medium ${statusClass}">
-                            ${item.status}
-                        </span>
-                    </td>
-                    <td class="px-4 py-3 text-gray-500">${new Date(item.timestamp).toLocaleString('th-TH')}</td>
-                `;
-                tableBody.appendChild(row);
-            });
-            
-            // Update pagination controls
-            document.getElementById('page-info').textContent = `หน้า ${currentPage} จาก ${totalPages || 1}`;
-            document.getElementById('prev-page-btn').disabled = currentPage === 1;
-            document.getElementById('next-page-btn').disabled = currentPage === totalPages || totalPages === 0;
-        }
-        
-        function changePage(delta) {
-            const totalPages = Math.ceil(inventory.length / itemsPerPage);
-            const newPage = currentPage + delta;
-            if (newPage >= 1 && newPage <= totalPages) {
-                currentPage = newPage;
-                renderTable();
-            }
-        }
-
-        // --- Message System ---
-        function showMessage(message, type = 'success') {
-            const container = document.getElementById('message-container');
-            const color = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : (type === 'warning' ? 'bg-yellow-600' : 'bg-blue-600'));
-            const item = document.createElement('div');
-            item.className = `p-4 mb-2 rounded-lg shadow-xl text-white fade-in ${color}`;
-            item.innerHTML = `
-                <div class="flex items-center">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        ${type === 'success' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>' : (type === 'error' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>' : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>')}
-                    </svg>
-                    <span>${message}</span>
+            <form onsubmit="addSingleItem(event)" class="space-y-4">
+                <div>
+                    <label for="modalSN" class="block text-sm font-medium text-gray-700 mb-2">📝 Serial Number</label>
+                    <input type="text" id="modalSN" placeholder="ใส่ Serial Number" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" required>
                 </div>
-            `;
-            container.appendChild(item);
-            setTimeout(() => {
-                item.classList.remove('fade-in');
-                item.style.opacity = '0';
-                item.style.transform = 'translateY(-10px)';
-                setTimeout(() => item.remove(), 300);
-            }, 5000);
-        }
-        
-        function updateSyncStatus(message, classes = 'text-blue-700') {
-            const statusElement = document.getElementById('sync-status');
-            if (statusElement) {
-                statusElement.innerHTML = message;
-                statusElement.className = `font-medium ${classes}`;
-            }
-        }
-        
-        // --- CRUD Operations ---
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">🏷️ เลือกหมวดหมู่</label>
+                    <div id="modalCategorySelection" class="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border min-h-[50px]">
+                        <p class="text-sm text-gray-500 w-full">กำลังโหลดหมวดหมู่...</p>
+                    </div>
+                    <input type="hidden" id="modalSelectedCategory" required data-validation-message="กรุณาเลือกหมวดหมู่">
+                </div>
 
-        // 📥 Receive Item
-        async function receiveItem(event) {
-            event.preventDefault();
-            const snText = document.getElementById('receive-sn').value;
-            const product = document.getElementById('receive-product').value;
-            const sns = normalizeSNs(snText);
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="hideAddItemModal()" 
+                            class="px-5 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-medium">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" id="modalSubmitBtn"
+                            class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
+                        <span>✅ เพิ่มรายการ</span>
+                        <i id="modalSpinner" class="fas fa-circle-notch fa-spin hidden"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-            if (!product) {
-                showMessage('กรุณาเลือกชื่อสินค้า!', 'error');
-                return;
-            }
-            if (sns.length === 0) {
-                showMessage('กรุณาใส่ Serial Number อย่างน้อยหนึ่งตัว!', 'error');
-                return;
-            }
-
-            let receivedCount = 0;
-            let rejectedCount = 0;
-            const newInventory = [];
-            const timestamp = Date.now();
+    <div id="editItemModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-auto shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">✏️ แก้ไขรายการสินค้า</h3>
+                <button type="button" onclick="hideEditItemModal()" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+            </div>
             
-            for (const sn of sns) {
-                const existingIndex = inventory.findIndex(item => item.sn === sn);
+            <form onsubmit="saveEditItem(event)" class="space-y-4">
+                <div>
+                    <label for="editSN" class="block text-sm font-medium text-gray-700 mb-2">📝 Serial Number</label>
+                    <input type="text" id="editSN" class="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-100 text-gray-600" readonly>
+                </div>
 
-                if (existingIndex !== -1) {
-                    // Item exists, update status to stock if currently issued
-                    if (inventory[existingIndex].status === 'เบิกจ่ายแล้ว') {
-                        inventory[existingIndex].status = 'คงเหลือในสต็อค';
-                        inventory[existingIndex].product = product; // Update product name
-                        inventory[existingIndex].technician = ''; // Clear technician
-                        inventory[existingIndex].timestamp = timestamp;
-                        await saveToStore('inventory', inventory[existingIndex]);
-                        receivedCount++;
-                    } else {
-                        // Already in stock
-                        rejectedCount++;
-                        console.warn(`SN ${sn} is already in stock.`);
-                    }
-                } else {
-                    // New item
-                    const newItem = {
-                        id: generateUniqueId(),
-                        sn: sn,
-                        product: product,
-                        status: 'คงเหลือในสต็อค',
-                        timestamp: timestamp,
-                        technician: ''
-                    };
-                    inventory.push(newItem);
-                    newInventory.push(newItem);
-                    await saveToStore('inventory', newItem);
-                    receivedCount++;
-                }
-            }
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">🏷️ แก้ไขหมวดหมู่</label>
+                    <div id="editCategorySelection" class="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border min-h-[50px]"></div>
+                    <input type="hidden" id="editSelectedCategory" required data-validation-message="กรุณาเลือกหมวดหมู่">
+                </div>
 
-            if (receivedCount > 0) {
-                showMessage(`รับของเข้าสต็อคสำเร็จ: ${receivedCount} รายการ`, 'success');
-            }
-            if (rejectedCount > 0) {
-                showMessage(`คำเตือน: ${rejectedCount} รายการมีอยู่แล้ว`, 'warning');
-            }
+                <div>
+                    <label for="editTechnician" class="block text-sm font-medium text-gray-700 mb-2">👤 ผู้เบิก (เฉพาะรายการที่เบิกแล้ว)</label>
+                    <input type="text" id="editTechnician" placeholder="ชื่อ/ID ผู้เบิก" 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
 
-            document.getElementById('receive-sn').value = '';
-            document.getElementById('receive-product').value = '';
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="hideEditItemModal()" 
+                            class="px-5 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-medium">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" id="editSubmitBtn"
+                            class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium flex items-center justify-center space-x-2">
+                        <span>💾 บันทึกการแก้ไข</span>
+                        <i id="editSpinner" class="fas fa-circle-notch fa-spin hidden"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-            await shareUpdate();
-            updateOverview();
-        }
 
-        // 📤 Issue Item
-        async function issueItem(event) {
-            event.preventDefault();
-            const snText = document.getElementById('issue-sn').value;
-            const technician = document.getElementById('issue-technician').value.trim();
-            const sns = normalizeSNs(snText);
+    <script>
+        // =============================================================
+        // 1. ตัวแปรและโหลดข้อมูลเริ่มต้น
+        // =============================================================
 
-            if (!technician) {
-                showMessage('กรุณาใส่ชื่อช่างที่เบิก!', 'error');
-                return;
-            }
-            if (sns.length === 0) {
-                showMessage('กรุณาใส่ Serial Number อย่างน้อยหนึ่งตัว!', 'error');
-                return;
-            }
+        let inventory = JSON.parse(localStorage.getItem('storeInventory')) || [];
+        let categories = JSON.parse(localStorage.getItem('storeCategories')) || []; // <--- แก้ไขแล้ว
+        let settings = JSON.parse(localStorage.getItem('storeSettings')) || { webAppUrl: DEFAULT_WEB_APP_URL };
+        let currentPage = 'dashboard';
+        const ITEMS_PER_PAGE = 10;
+        let currentInventoryPage = 1;
 
-            let issuedCount = 0;
-            let notFoundCount = 0;
-            let alreadyIssuedCount = 0;
-            const timestamp = Date.now();
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSettings();
+            showPage('dashboard');
+            updateAllDisplays();
+            updateDateTime();
+            setInterval(updateDateTime, 1000); 
+        });
 
-            for (const sn of sns) {
-                const existingIndex = inventory.findIndex(item => item.sn === sn);
-
-                if (existingIndex !== -1) {
-                    if (inventory[existingIndex].status === 'คงเหลือในสต็อค') {
-                        inventory[existingIndex].status = 'เบิกจ่ายแล้ว';
-                        inventory[existingIndex].technician = technician;
-                        inventory[existingIndex].timestamp = timestamp;
-                        await saveToStore('inventory', inventory[existingIndex]);
-                        issuedCount++;
-                    } else {
-                        alreadyIssuedCount++;
-                    }
-                } else {
-                    notFoundCount++;
-                }
-            }
-            
-            if (issuedCount > 0) {
-                showMessage(`เบิกจ่ายสำเร็จ: ${issuedCount} รายการ ให้กับช่าง ${technician}`, 'success');
-            }
-            if (alreadyIssuedCount > 0) {
-                showMessage(`คำเตือน: ${alreadyIssuedCount} รายการเบิกจ่ายไปแล้ว`, 'warning');
-            }
-            if (notFoundCount > 0) {
-                showMessage(`ข้อผิดพลาด: ไม่พบ SN ในสต็อค: ${notFoundCount} รายการ`, 'error');
-            }
-
-            document.getElementById('issue-sn').value = '';
-            document.getElementById('issue-technician').value = '';
-            
-            await shareUpdate();
-            updateOverview();
-        }
-
-        // --- Settings and Cloud Logic ---
-        
         function loadSettings() {
-            document.getElementById('sheets-url').value = settings.sheetsUrl || '';
-            document.getElementById('api-key').value = settings.apiKey || '';
-            document.getElementById('auto-sync').checked = settings.autoSync !== false;
-            document.getElementById('cloud-sync-toggle').checked = settings.cloudSyncEnabled !== false;
-            cloudSyncEnabled = settings.cloudSyncEnabled !== false;
-            cloudSyncUrl = settings.sheetsUrl || '';
-            
-            // Update settings object
-            settings = {
-                sheetsUrl: document.getElementById('sheets-url').value,
-                apiKey: document.getElementById('api-key').value,
-                autoSync: document.getElementById('auto-sync').checked,
-                cloudSyncEnabled: document.getElementById('cloud-sync-toggle').checked
-            };
-        }
-
-        async function saveSettings() {
-            settings = {
-                sheetsUrl: document.getElementById('sheets-url').value,
-                apiKey: document.getElementById('api-key').value,
-                autoSync: document.getElementById('auto-sync').checked,
-                cloudSyncEnabled: document.getElementById('cloud-sync-toggle').checked
-            };
-            
-            await Promise.all(Object.keys(settings).map(key => saveToStore('settings', { key: key, value: settings[key] })));
-            localStorage.setItem('iot-settings', JSON.stringify(settings)); // Fallback
-            
-            cloudSyncUrl = settings.sheetsUrl;
-            cloudSyncEnabled = settings.cloudSyncEnabled;
-            
-            showMessage('บันทึกการตั้งค่าแล้ว', 'info');
+            if (settings.webAppUrl) {
+                document.getElementById('webAppUrl').value = settings.webAppUrl;
+                updateConnectionStatus('active', '✅ เชื่อมต่อ URL แล้ว');
+            } else {
+                document.getElementById('webAppUrl').value = '';
+                updateConnectionStatus('inactive', '⚠️ ยังไม่ได้ตั้งค่า URL Apps Script');
+            }
         }
         
-        async function testConnection() {
-            const url = document.getElementById('sheets-url').value;
+        function updateConnectionStatus(type, message) {
+            const statusEl = document.getElementById('connectionStatus');
+            let color = 'gray';
+            if (type === 'active') color = 'green';
+            else if (type === 'error') color = 'red';
+            else if (type === 'test-success') color = 'blue';
+            else if (type === 'test-fail') color = 'red';
+
+            statusEl.innerHTML = `<span class="text-${color}-600">${message}</span>`;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgColor = 'bg-emerald-500';
+            let icon = '<i class="fas fa-check-circle"></i>';
+            if (type === 'error') {
+                bgColor = 'bg-red-500';
+                icon = '<i class="fas fa-times-circle"></i>';
+            } else if (type === 'warning') {
+                bgColor = 'bg-orange-500';
+                icon = '<i class="fas fa-exclamation-triangle"></i>';
+            } else if (type === 'info') {
+                 bgColor = 'bg-blue-500';
+                icon = '<i class="fas fa-info-circle"></i>';
+            }
+
+            toast.className = `toast ${bgColor} text-white p-4 rounded-xl shadow-lg flex items-center space-x-3`;
+            toast.innerHTML = `${icon} <span>${message}</span>`;
+            
+            container.prepend(toast); // ใส่ไว้บนสุด
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 500); // ลบออกจาก DOM หลัง Animation
+            }, 4000); 
+        }
+
+        // =============================================================
+        // 2. ฟังก์ชันจัดการข้อมูล (Local Storage & Sync)
+        // =============================================================
+        
+        function saveInventory() {
+            localStorage.setItem('storeInventory', JSON.stringify(inventory));
+            updateAllDisplays(); 
+        }
+
+        function saveCategories() {
+            // กรองหมวดหมู่ที่ซ้ำและเรียงลำดับ
+            categories = [...new Set(categories)].sort(); 
+            localStorage.setItem('storeCategories', JSON.stringify(categories));
+            updateAllDisplays(); 
+        }
+
+        // ฟังก์ชันสมมติสำหรับส่งข้อมูลไปยัง Google Apps Script
+        async function fetchData(action, payload) {
+            const url = settings.webAppUrl;
             if (!url) {
-                showMessage('กรุณาใส่ Google Apps Script URL ก่อน!', 'error');
-                return;
+                showToast('❌ ไม่ได้ตั้งค่า Apps Script URL', 'error');
+                return { success: false, message: 'Apps Script URL not set.' };
             }
             
-            showMessage('กำลังทดสอบการเชื่อมต่อ...', 'info');
-
+            // payload คือ Object ที่จะรวม action และ data
+            const params = { action: action, data: JSON.stringify(payload) };
+            
             try {
-                // Retry logic for robustness against temporary network issues
-                let response = null;
-                const maxRetries = 3;
-                let delay = 1000;
-                
-                for (let i = 0; i < maxRetries; i++) {
-                    try {
-                        // FIX: Removed 'Content-Type: application/json' header to ensure a "Simple Request"
-                        // is made, bypassing the preflight OPTIONS check that fails with GAS on localhost.
-                        response = await fetch(url, {
-                            method: 'POST',
-                            mode: 'cors',
-                            body: JSON.stringify({ action: 'test' })
-                        });
-                        if (response.ok) break; // Success, break retry loop
-                    } catch (e) {
-                        // Network error, pause before retry
-                        if (i < maxRetries - 1) {
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            delay *= 2; // Exponential backoff
-                        } else {
-                             throw e; // Last retry failed, throw original error
-                        }
-                    }
-                }
-                
-                if (response && response.ok) {
-                    const result = await response.json();
-                    if (result.success) {
-                        showMessage('เชื่อมต่อ Google Sheets สำเร็จ! ✅', 'success');
-                        return;
-                    } else {
-                        // The Apps Script deployed, but the code failed internally
-                        showMessage('เชื่อมต่อล้มเหลว (Apps Script ภายใน): ' + (result.error || 'Unknown error'), 'error');
-                        return;
-                    }
-                } else {
-                    // The request reached the server but returned a non-200 status
-                     throw new Error('HTTP Error: ' + response?.status);
-                }
-
-            } catch (error) {
-                // The network request failed completely (e.g. CORS, bad URL, deployment error)
-                showMessage('ข้อผิดพลาดในการเชื่อมต่อ: กรุณาตรวจสอบ URL และการ Deploy', 'error');
-                console.error('Connection Test Error:', error);
-            }
-        }
-        
-        async function exportToGoogleSheets() {
-            if (!cloudSyncUrl) {
-                showMessage('กรุณาตั้งค่า Google Apps Script URL ก่อน', 'error');
-                showTab('settings');
-                return;
-            }
-            
-            const inventoryToExport = inventory.map(item => ({
-                SN: item.sn,
-                Product: item.product,
-                Status: item.status,
-                Technician: item.technician || '-',
-                Date: new Date(item.timestamp).toLocaleString('th-TH')
-            }));
-
-            if (inventoryToExport.length === 0) {
-                 showMessage('ไม่มีข้อมูลให้ส่งออก', 'info');
-                 return;
-            }
-            
-            showMessage('กำลังส่งข้อมูลไปยัง Google Sheets...', 'info');
-
-            try {
-                // FIX: Removed 'Content-Type: application/json' header to ensure a "Simple Request"
-                // is made, bypassing the preflight OPTIONS check that fails with GAS on localhost.
-                const response = await fetch(cloudSyncUrl, {
+                const response = await fetch(url, {
                     method: 'POST',
                     mode: 'cors',
-                    body: JSON.stringify({ 
-                        action: 'updateInventory', 
-                        data: inventoryToExport,
-                        apiKey: settings.apiKey 
-                    })
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams(params).toString()
                 });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 
                 const result = await response.json();
                 
-                if (result.success) {
-                    showMessage(`ส่งข้อมูล ${result.rows} รายการไปยัง Google Sheets สำเร็จ!`, 'success');
+                if (result.status === 'success') {
+                    showToast(`☁️ ซิงค์ข้อมูล ${action} สำเร็จ`, 'info');
+                    return { success: true, message: result.message };
                 } else {
-                    showMessage('ส่งข้อมูลล้มเหลว: ' + (result.error || 'Unknown error'), 'error');
+                    showToast(`⚠️ ซิงค์ข้อมูล ${action} ล้มเหลว: ${result.message}`, 'warning');
+                    return { success: false, message: result.message };
+                }
+
+            } catch (error) {
+                console.error('Error syncing with Apps Script:', error);
+                showToast(`🚨 ข้อผิดพลาดในการเชื่อมต่อ Apps Script: ${error.message}`, 'error');
+                return { success: false, message: error.message };
+            }
+        }
+
+        // =============================================================
+        // 3. ฟังก์ชันหน้า UI & General
+        // =============================================================
+
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active', 'fade-in'));
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            
+            const activePage = document.getElementById(pageId);
+            const activeNav = document.getElementById('nav-' + pageId);
+            
+            if (activePage) activePage.classList.add('active', 'fade-in');
+            if (activeNav) activeNav.classList.add('active');
+            
+            currentPage = pageId;
+            
+            if (pageId === 'inventory') {
+                currentInventoryPage = 1;
+                updateInventoryDisplay();
+            } else if (pageId === 'receive') {
+                renderCategoryButtons('categorySelection', 'selectedCategory');
+            } else if (pageId === 'dashboard') {
+                updateDashboard();
+            }
+        }
+
+        function updateAllDisplays() {
+            updateDashboard();
+            updateRecentItems();
+            renderCategoryButtons('categorySelection', 'selectedCategory'); 
+            renderCategoryButtons('modalCategorySelection', 'modalSelectedCategory');
+            // ไม่ต้องเรียก updateInventoryDisplay() ที่นี่ เพราะถูกเรียกใน showPage('inventory')
+        }
+
+        function updateDateTime() {
+            const now = new Date();
+            // รูปแบบ dd/mm/yyyy
+            const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' }); 
+            // รูปแบบ YYYY-MM-DD สำหรับ log/sheets
+            const dateLogFormat = now.toISOString().split('T')[0]; 
+            
+            const currentDateEl = document.getElementById('currentDate');
+            const withdrawDateEl = document.getElementById('withdrawDate');
+            
+            if (currentDateEl) currentDateEl.textContent = dateStr;
+            if (withdrawDateEl) withdrawDateEl.textContent = dateStr;
+            return dateLogFormat; 
+        }
+        
+        function clearReceiveForm() {
+            document.getElementById('serialNumbers').value = '';
+            document.getElementById('newCategoryInput').value = '';
+            document.getElementById('selectedCategory').value = '';
+            
+            document.querySelectorAll('#categorySelection .category-button').forEach(btn => {
+                btn.classList.remove('selected', 'bg-emerald-500', 'text-white');
+                btn.classList.add('border-emerald-500', 'text-emerald-600', 'hover:bg-emerald-50');
+            });
+        }
+        
+        function clearWithdrawForm() {
+            document.getElementById('withdrawSN').value = '';
+            document.getElementById('technicianName').value = '';
+            document.getElementById('availabilityCheck').classList.add('hidden');
+            document.getElementById('checkResults').innerHTML = '';
+        }
+
+        // =============================================================
+        // 4. ฟังก์ชันจัดการหมวดหมู่ (Category)
+        // =============================================================
+        
+        function renderCategoryButtons(containerId, inputId, currentCategory = '') {
+            const container = document.getElementById(containerId);
+            const input = document.getElementById(inputId);
+            container.innerHTML = '';
+            
+            if (categories.length === 0) {
+                 container.innerHTML = `<p class="text-sm text-gray-500 w-full">⚠️ ยังไม่มีหมวดหมู่ กรุณาเพิ่มใหม่ด้านล่าง</p>`;
+                 return;
+            }
+            
+            // ใช้ค่าจาก input.value หรือ currentCategory ที่ถูกส่งมา
+            const selectedCat = currentCategory || input.value;
+
+            categories.forEach(cat => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = cat;
+                
+                let isSelected = cat === selectedCat;
+                
+                button.className = `category-button px-3 py-1 rounded-full text-sm border transition-colors ${
+                    isSelected 
+                        ? 'selected bg-emerald-500 text-white border-emerald-500' 
+                        : 'border-emerald-500 text-emerald-600 hover:bg-emerald-50'
+                }`;
+                button.setAttribute('data-category', cat);
+                
+                button.onclick = () => {
+                    // ล้างการเลือกเดิมใน container นี้
+                    container.querySelectorAll('.category-button').forEach(btn => {
+                        btn.classList.remove('selected', 'bg-emerald-500', 'text-white', 'border-emerald-500');
+                        btn.classList.add('border-emerald-500', 'text-emerald-600', 'hover:bg-emerald-50');
+                    });
+                    
+                    // เลือกปุ่มปัจจุบัน
+                    button.classList.add('selected', 'bg-emerald-500', 'text-white', 'border-emerald-500');
+                    button.classList.remove('text-emerald-600', 'hover:bg-emerald-50');
+                    
+                    input.value = cat; 
+                };
+                container.appendChild(button);
+            });
+            
+            // ถ้ามี selectedCat ให้ตั้งค่า input และไฮไลท์ปุ่ม
+            if (selectedCat) {
+                 input.value = selectedCat;
+            } else {
+                input.value = '';
+            }
+
+            document.getElementById('dash-categories').textContent = categories.length;
+        }
+
+        function addNewCategory() {
+            const inputEl = document.getElementById('newCategoryInput');
+            const newCat = inputEl.value.trim();
+            
+            if (newCat) {
+                 // ทำให้ตัวอักษรแรกเป็นตัวใหญ่ ที่เหลือตัวเล็ก
+                 const formattedCat = newCat.charAt(0).toUpperCase() + newCat.slice(1).toLowerCase();
+
+                if (!categories.includes(formattedCat)) {
+                    categories.push(formattedCat);
+                    saveCategories();
+                    inputEl.value = '';
+                    renderCategoryButtons('categorySelection', 'selectedCategory', formattedCat); // ส่งชื่อหมวดหมู่ที่เพิ่งเพิ่มไปเลือกทันที
+                    showToast(`✅ เพิ่มหมวดหมู่ "${formattedCat}" สำเร็จ`);
+                } else {
+                    showToast(`⚠️ หมวดหมู่ "${formattedCat}" มีอยู่แล้ว`, 'warning');
+                    // เลือกหมวดหมู่ที่มีอยู่แล้ว
+                    document.querySelector(`#categorySelection [data-category="${formattedCat}"]`).click();
+                    inputEl.value = '';
+                }
+            }
+        }
+        
+        // =============================================================
+        // 5. หน้า Dashboard
+        // =============================================================
+        
+        function updateDashboard() {
+            const total = inventory.length;
+            const available = inventory.filter(item => item.Status === 'Available').length;
+            const withdrawn = total - available;
+            
+            document.getElementById('dash-total').textContent = total;
+            document.getElementById('dash-available').textContent = available;
+            document.getElementById('dash-withdrawn').textContent = withdrawn;
+            document.getElementById('dash-categories').textContent = categories.length;
+            
+            updateRecentItems();
+        }
+        
+        function updateRecentItems() {
+            const recentContainer = document.getElementById('recentItems');
+            
+            // เรียงตามวันที่รับเข้า (สมมติว่า ReceiveDate สามารถเรียงได้)
+            const sortedInventory = [...inventory].sort((a, b) => new Date(b.ReceiveDate) - new Date(a.ReceiveDate));
+            const recentItems = sortedInventory.slice(0, 5);
+            
+            recentContainer.innerHTML = '';
+            
+            if (recentItems.length === 0) {
+                 recentContainer.innerHTML = `<p class="text-sm text-gray-500">ไม่มีรายการล่าสุด</p>`;
+                 return;
+            }
+
+            recentItems.forEach(item => {
+                const statusColor = item.Status === 'Available' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800';
+                
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm';
+                itemDiv.innerHTML = `
+                    <div class="truncate">
+                        <span class="font-medium text-gray-700">${item.SN}</span> 
+                        <span class="text-xs text-gray-500 ml-2">(${item.Category})</span>
+                    </div>
+                    <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusColor}">
+                        ${item.Status === 'Available' ? 'คงเหลือ' : 'เบิกแล้ว'}
+                    </span>
+                `;
+                recentContainer.appendChild(itemDiv);
+            });
+        }
+
+        // =============================================================
+        // 6. หน้า Receive (รับเข้า)
+        // =============================================================
+
+        async function addItems(event) {
+            event.preventDefault();
+            
+            const submitBtn = document.getElementById('receiveSubmitBtn');
+            const spinner = document.getElementById('receiveSpinner');
+            
+            submitBtn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            const serialNumbersText = document.getElementById('serialNumbers').value.toUpperCase();
+            const snList = serialNumbersText.split('\n').map(sn => sn.trim()).filter(sn => sn.length > 0);
+            const category = document.getElementById('selectedCategory').value;
+            const receiveDate = updateDateTime(); 
+
+            if (!category) {
+                showToast(document.getElementById('selectedCategory').dataset.validationMessage, 'error');
+                submitBtn.disabled = false;
+                spinner.classList.add('hidden');
+                return;
+            }
+
+            const newItems = [];
+            const duplicateSNs = [];
+            const existingSNs = inventory.map(item => item.SN);
+
+            // 1. ตรวจสอบ SN ซ้ำก่อน
+            snList.forEach(sn => {
+                if (existingSNs.includes(sn)) {
+                    duplicateSNs.push(sn);
+                } else {
+                    newItems.push({
+                        SN: sn,
+                        Category: category,
+                        Status: 'Available',
+                        ReceiveDate: receiveDate,
+                        WithdrawDate: '',
+                        Technician: ''
+                    });
+                }
+            });
+
+            if (duplicateSNs.length > 0) {
+                showToast(`⚠️ ไม่สามารถรับเข้า ${duplicateSNs.length} รายการ: มี Serial Number ซ้ำ`, 'error');
+                console.error('Duplicate SNs:', duplicateSNs);
+            }
+            
+            if (newItems.length > 0) {
+                // เพิ่มเข้า Local Inventory
+                inventory.push(...newItems);
+                saveInventory(); 
+                clearReceiveForm();
+                showToast(`✅ รับสินค้าเข้าคลังสำเร็จ ${newItems.length} รายการ`, 'success');
+
+                // 2. ส่งข้อมูลไป Apps Script (ถ้าตั้งค่าแล้ว)
+                if (settings.webAppUrl) {
+                    await fetchData('add', newItems); 
+                }
+            } else if (duplicateSNs.length === snList.length) {
+                showToast(`❌ ไม่มีการรับเข้าสำเร็จเลย: Serial Number ซ้ำทั้งหมด`, 'error');
+            }
+
+            submitBtn.disabled = false;
+            spinner.classList.add('hidden');
+        }
+        
+        function addSingleItem(event) {
+            event.preventDefault();
+            
+            const sn = document.getElementById('modalSN').value.toUpperCase().trim();
+            const category = document.getElementById('modalSelectedCategory').value;
+            const receiveDate = updateDateTime(); 
+
+            if (!category) {
+                 showToast(document.getElementById('modalSelectedCategory').dataset.validationMessage, 'error');
+                 return;
+            }
+            
+            if (inventory.some(item => item.SN === sn)) {
+                showToast(`⚠️ Serial Number "${sn}" มีอยู่ในคลังแล้ว`, 'error');
+                return;
+            }
+
+            const newItem = {
+                SN: sn,
+                Category: category,
+                Status: 'Available',
+                ReceiveDate: receiveDate,
+                WithdrawDate: '',
+                Technician: ''
+            };
+
+            inventory.push(newItem);
+            saveInventory();
+            hideAddItemModal();
+            
+            showToast(`✅ เพิ่มรายการ "${sn}" สำเร็จ`, 'success');
+
+            // ส่งข้อมูลไป Apps Script
+            if (settings.webAppUrl) {
+                fetchData('add', [newItem]); 
+            }
+        }
+        
+        function showAddItemModal() {
+            document.getElementById('addItemModal').classList.remove('hidden');
+            document.getElementById('modalSN').value = '';
+            // ตรวจสอบให้แน่ใจว่าได้ Render Category ปุ่มแล้ว
+            renderCategoryButtons('modalCategorySelection', 'modalSelectedCategory');
+        }
+
+        function hideAddItemModal() {
+            document.getElementById('addItemModal').classList.add('hidden');
+        }
+
+        // =============================================================
+        // 7. หน้า Withdraw (เบิกจ่าย)
+        // =============================================================
+
+        function checkAvailability() {
+            const snText = document.getElementById('withdrawSN').value.toUpperCase();
+            const snList = snText.split('\n').map(sn => sn.trim()).filter(sn => sn.length > 0);
+            const checkResults = document.getElementById('checkResults');
+            const checkContainer = document.getElementById('availabilityCheck');
+            checkResults.innerHTML = '';
+            checkContainer.classList.remove('hidden');
+            
+            if (snList.length === 0) {
+                 checkResults.innerHTML = `<p class="text-sm text-gray-500">กรุณาใส่ Serial Number เพื่อตรวจสอบ</p>`;
+                 return;
+            }
+
+            let allAvailable = true;
+
+            snList.forEach(sn => {
+                const item = inventory.find(i => i.SN === sn);
+                const resultDiv = document.createElement('p');
+                resultDiv.className = 'text-sm';
+
+                if (!item) {
+                    resultDiv.innerHTML = `<span class="text-red-500 font-medium">${sn}</span>: ❌ ไม่พบในคลัง`;
+                    allAvailable = false;
+                } else if (item.Status === 'Withdrawn') {
+                    resultDiv.innerHTML = `<span class="text-orange-500 font-medium">${sn}</span>: ⚠️ ถูกเบิกไปแล้ว โดย ${item.Technician} (${item.WithdrawDate})`;
+                    allAvailable = false;
+                } else {
+                    resultDiv.innerHTML = `<span class="text-emerald-500 font-medium">${sn}</span>: ✅ พร้อมเบิก (${item.Category})`;
+                }
+                checkResults.appendChild(resultDiv);
+            });
+            
+            if (allAvailable && snList.length > 0) {
+                showToast('✅ รายการทั้งหมดพร้อมเบิกจ่าย', 'success');
+            } else if (!allAvailable) {
+                showToast('⚠️ พบรายการที่ไม่พร้อมเบิกจ่าย (โปรดตรวจสอบรายละเอียด)', 'warning');
+            }
+        }
+
+        async function withdrawItems(event) {
+            event.preventDefault();
+            
+            const submitBtn = document.getElementById('withdrawSubmitBtn');
+            const spinner = document.getElementById('withdrawSpinner');
+            
+            submitBtn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            const snText = document.getElementById('withdrawSN').value.toUpperCase();
+            const snList = snText.split('\n').map(sn => sn.trim()).filter(sn => sn.length > 0);
+            const technicianName = document.getElementById('technicianName').value.trim();
+            const withdrawDate = updateDateTime();
+            
+            if (snList.length === 0 || !technicianName) {
+                showToast('❌ กรุณากรอก Serial Number และชื่อผู้เบิก', 'error');
+                submitBtn.disabled = false;
+                spinner.classList.add('hidden');
+                return;
+            }
+
+            const withdrawnItems = [];
+            const failedWithdrawals = [];
+            
+            let itemsToSync = [];
+            
+            snList.forEach(sn => {
+                const itemIndex = inventory.findIndex(i => i.SN === sn);
+                if (itemIndex > -1) {
+                    const item = inventory[itemIndex];
+                    if (item.Status === 'Available') {
+                        // ดำเนินการเบิก
+                        inventory[itemIndex].Status = 'Withdrawn';
+                        inventory[itemIndex].WithdrawDate = withdrawDate;
+                        inventory[itemIndex].Technician = technicianName;
+                        withdrawnItems.push(sn);
+                        
+                        // เตรียมข้อมูลสำหรับซิงค์ 
+                        itemsToSync.push({ 
+                            SN: sn, 
+                            Technician: technicianName, 
+                            WithdrawDate: withdrawDate
+                        });
+                    } else {
+                        failedWithdrawals.push(`${sn} (ถูกเบิกแล้ว)`);
+                    }
+                } else {
+                    failedWithdrawals.push(`${sn} (ไม่พบในคลัง)`);
+                }
+            });
+
+            if (withdrawnItems.length > 0) {
+                saveInventory();
+                clearWithdrawForm();
+                showToast(`✅ เบิกจ่ายสำเร็จ ${withdrawnItems.length} รายการ`, 'success');
+                
+                // ส่งข้อมูลไป Apps Script
+                if (settings.webAppUrl) {
+                    await fetchData('withdraw', itemsToSync); 
+                }
+            }
+
+            if (failedWithdrawals.length > 0) {
+                 showToast(`⚠️ เบิกจ่ายไม่สำเร็จ ${failedWithdrawals.length} รายการ: ${failedWithdrawals.slice(0, 3).join(', ')}...`, 'error');
+            }
+            
+            if (withdrawnItems.length === 0 && failedWithdrawals.length > 0) {
+                 showToast('❌ ไม่มีการเบิกจ่ายสำเร็จเลย', 'error');
+            }
+
+            submitBtn.disabled = false;
+            spinner.classList.add('hidden');
+        }
+
+        // =============================================================
+        // 8. หน้า Inventory (รายการสินค้า)
+        // =============================================================
+
+        function filterInventory() {
+            const filterText = document.getElementById('searchSN').value.toUpperCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            let filtered = inventory.filter(item => {
+                const matchesSN = item.SN.toUpperCase().includes(filterText) || 
+                                  item.Category.toUpperCase().includes(filterText);
+                const matchesStatus = statusFilter === '' || item.Status === statusFilter;
+                return matchesSN && matchesStatus;
+            });
+            
+            // เรียงตาม SN
+            filtered.sort((a, b) => a.SN.localeCompare(b.SN));
+
+            currentInventoryPage = 1; // รีเซ็ตหน้าเมื่อมีการฟิลเตอร์
+            updateInventoryDisplay(filtered);
+        }
+
+        function updateInventoryDisplay(data = null) {
+            const tableBody = document.getElementById('inventoryTable');
+            const paginationContainer = document.getElementById('inventoryPagination');
+            const filteredData = data || inventory;
+            
+            tableBody.innerHTML = '';
+            paginationContainer.innerHTML = '';
+            
+            if (filteredData.length === 0) {
+                tableBody.innerHTML = `<tr class="text-center"><td colspan="7" class="py-4 text-gray-500">ไม่พบรายการสินค้าที่ตรงกับเงื่อนไข</td></tr>`;
+                return;
+            }
+
+            const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+            const startIndex = (currentInventoryPage - 1) * ITEMS_PER_PAGE;
+            const endIndex = startIndex + ITEMS_PER_PAGE;
+            const pageItems = filteredData.slice(startIndex, endIndex);
+
+            pageItems.forEach(item => {
+                const row = tableBody.insertRow();
+                const statusColor = item.Status === 'Available' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800';
+                
+                row.className = 'border-b border-gray-100 hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-sm font-medium text-gray-800">${item.SN}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${item.Category}</td>
+                    <td class="px-4 py-3 text-xs text-gray-500">${formatDate(item.ReceiveDate)}</td>
+                    <td class="px-4 py-3 text-xs">
+                        <span class="px-2 py-1 rounded-full font-semibold ${statusColor}">
+                            ${item.Status === 'Available' ? 'คงเหลือ' : 'เบิกแล้ว'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${item.Technician || '-'}</td>
+                    <td class="px-4 py-3 text-xs text-gray-500">${formatDate(item.WithdrawDate || '-')}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="showEditItemModal('${item.SN}')" title="แก้ไข" class="text-blue-600 hover:text-blue-800 mr-2"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteItem('${item.SN}')" title="ลบ" class="text-red-600 hover:text-red-800"><i class="fas fa-trash-alt"></i></button>
+                    </td>
+                `;
+            });
+            
+            // สร้าง Pagination
+            if (totalPages > 1) {
+                for (let i = 1; i <= totalPages; i++) {
+                    const button = document.createElement('button');
+                    button.textContent = i;
+                    button.className = `px-3 py-1 mx-1 rounded-lg text-sm font-medium transition-colors ${
+                        i === currentInventoryPage 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`;
+                    button.onclick = () => {
+                        currentInventoryPage = i;
+                        updateInventoryDisplay(filteredData);
+                    };
+                    paginationContainer.appendChild(button);
+                }
+            }
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString || dateString === '-') return '-';
+            try {
+                const date = new Date(dateString + 'T00:00:00'); // ป้องกัน Timezone Offset
+                return date.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } catch (e) {
+                return dateString;
+            }
+        }
+        
+        function showEditItemModal(sn) {
+            const item = inventory.find(i => i.SN === sn);
+            if (!item) {
+                showToast(`❌ ไม่พบรายการ SN: ${sn}`, 'error');
+                return;
+            }
+            
+            document.getElementById('editSN').value = item.SN;
+            document.getElementById('editTechnician').value = item.Technician || '';
+            
+            // Render category buttons ใน Modal แก้ไข
+            renderCategoryButtons('editCategorySelection', 'editSelectedCategory', item.Category);
+            
+            document.getElementById('editItemModal').classList.remove('hidden');
+        }
+
+        function hideEditItemModal() {
+            document.getElementById('editItemModal').classList.add('hidden');
+        }
+        
+        async function saveEditItem(event) {
+            event.preventDefault();
+            
+            const submitBtn = document.getElementById('editSubmitBtn');
+            const spinner = document.getElementById('editSpinner');
+            submitBtn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            const sn = document.getElementById('editSN').value;
+            const newCategory = document.getElementById('editSelectedCategory').value;
+            const newTechnician = document.getElementById('editTechnician').value.trim();
+            
+            const itemIndex = inventory.findIndex(i => i.SN === sn);
+
+            if (itemIndex > -1) {
+                const oldItem = inventory[itemIndex];
+
+                // อัพเดทข้อมูลใน Local Inventory
+                inventory[itemIndex].Category = newCategory;
+                
+                // อัพเดทผู้เบิกและสถานะตามข้อมูลที่ส่งมา (ถ้ามีการแก้ไขผู้เบิกในรายการที่เบิกแล้ว)
+                if (oldItem.Status === 'Withdrawn') {
+                    inventory[itemIndex].Technician = newTechnician;
+                } else if (newTechnician && oldItem.Status === 'Available') {
+                    // หากใส่ชื่อผู้เบิกในรายการที่ยังไม่เบิก จะถือเป็นการเปลี่ยนสถานะเป็น Withdrawn ทันที
+                    inventory[itemIndex].Status = 'Withdrawn';
+                    inventory[itemIndex].Technician = newTechnician;
+                    inventory[itemIndex].WithdrawDate = updateDateTime();
+                    showToast(`⚠️ ระบบเปลี่ยนสถานะเป็นเบิกแล้วโดยอัตโนมัติ`, 'warning');
+                } else if (!newTechnician && oldItem.Status === 'Withdrawn') {
+                    // หากลบชื่อผู้เบิกออกจากรายการที่เบิกแล้ว ให้เปลี่ยนสถานะกลับเป็น Available
+                    inventory[itemIndex].Status = 'Available';
+                    inventory[itemIndex].Technician = '';
+                    inventory[itemIndex].WithdrawDate = '';
+                    showToast(`⚠️ ระบบเปลี่ยนสถานะเป็นคงเหลือ (Available)`, 'warning');
+                }
+
+                saveInventory();
+                hideEditItemModal();
+                showToast(`✅ แก้ไขรายการ SN: ${sn} สำเร็จ`, 'success');
+                
+                // ส่งข้อมูลไป Apps Script
+                if (settings.webAppUrl) {
+                    await fetchData('edit', inventory[itemIndex]); 
+                }
+                
+            } else {
+                showToast(`❌ ข้อผิดพลาด: ไม่พบรายการ SN: ${sn}`, 'error');
+            }
+            
+            submitBtn.disabled = false;
+            spinner.classList.add('hidden');
+        }
+
+        function deleteItem(sn) {
+            if (confirm(`คุณต้องการลบรายการ SN: ${sn} ออกจากคลังสินค้าจริงหรือไม่?`)) {
+                const initialLength = inventory.length;
+                inventory = inventory.filter(item => item.SN !== sn);
+                
+                if (inventory.length < initialLength) {
+                    saveInventory();
+                    showToast(`✅ ลบรายการ SN: ${sn} สำเร็จ`, 'success');
+                    
+                    // ส่งข้อมูลไป Apps Script
+                    if (settings.webAppUrl) {
+                        fetchData('delete', { SN: sn }); 
+                    }
+                } else {
+                    showToast(`❌ ไม่พบรายการ SN: ${sn} ที่จะลบ`, 'error');
+                }
+            }
+        }
+
+
+        // =============================================================
+        // 9. หน้า Settings (ตั้งค่า)
+        // =============================================================
+
+        function saveWebAppUrl() {
+            const url = document.getElementById('webAppUrl').value.trim();
+            if (url) {
+                settings.webAppUrl = url;
+                localStorage.setItem('storeSettings', JSON.stringify(settings));
+                updateConnectionStatus('active', '✅ บันทึก URL Apps Script สำเร็จ');
+                showToast('💾 บันทึกการตั้งค่าสำเร็จ', 'success');
+            } else {
+                settings.webAppUrl = '';
+                localStorage.setItem('storeSettings', JSON.stringify(settings));
+                updateConnectionStatus('inactive', '⚠️ ล้าง URL Apps Script แล้ว');
+                showToast('⚠️ กรุณากรอก URL ที่ถูกต้อง', 'warning');
+            }
+        }
+
+        async function testGoogleSheetsConnection() {
+            if (!settings.webAppUrl) {
+                showToast('❌ กรุณาบันทึก URL ก่อนทำการทดสอบ', 'error');
+                updateConnectionStatus('inactive', '⚠️ ยังไม่ได้ตั้งค่า URL Apps Script');
+                return;
+            }
+            
+            updateConnectionStatus('info', '⌛ กำลังทดสอบการเชื่อมต่อ...');
+            
+            const testPayload = { message: 'TEST_CONNECTION' };
+
+            try {
+                const response = await fetch(settings.webAppUrl, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'test', data: JSON.stringify(testPayload) }).toString()
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success' && result.message === 'Test connection successful!') {
+                    updateConnectionStatus('test-success', '🎉 การเชื่อมต่อสำเร็จ!');
+                    showToast('🎉 ทดสอบการเชื่อมต่อ Apps Script สำเร็จ', 'success');
+                } else {
+                    throw new Error(result.message || 'Server returned an unknown error.');
                 }
             } catch (error) {
-                showMessage('ข้อผิดพลาดในการส่งข้อมูล: กรุณาตรวจสอบการเชื่อมต่อ', 'error');
-                console.error('Export Error:', error);
+                console.error('Connection Test Error:', error);
+                updateConnectionStatus('test-fail', `❌ การเชื่อมต่อล้มเหลว: ${error.message}`);
+                showToast('🚨 ทดสอบล้มเหลว (โปรดตรวจสอบ URL และการ Deploy)', 'error');
             }
         }
 
-        // --- Password Confirmation and Deletion Logic ---
-
-        // 1. รหัสผ่านลับสำหรับการลบข้อมูลทั้งหมด
-        const DELETE_PASSWORD = "John19195";
-
-        function showDeleteConfirmModal() {
-            document.getElementById('delete-modal').classList.remove('hidden');
-            document.getElementById('delete-password').value = ''; // Clear input on open
-            document.getElementById('delete-password').focus();
-        }
-
-        function hideDeleteConfirmModal() {
-            document.getElementById('delete-modal').classList.add('hidden');
-        }
-
-        /**
-         * 🚨 นี่คือฟังก์ชันหลักที่ทำการตรวจสอบรหัสผ่าน 🚨
-         */
-        async function confirmDeleteAllData() {
-            const enteredPassword = document.getElementById('delete-password').value;
-
-            // ตรวจสอบรหัสผ่าน: ถ้าถูกต้อง
-            if (enteredPassword === DELETE_PASSWORD) {
-                // รหัสผ่านถูกต้อง -> ดำเนินการลบ
-                await deleteAllData();
-                hideDeleteConfirmModal();
-                showMessage('✅ ล้างข้อมูลทั้งหมดในระบบสำเร็จแล้ว!', 'success');
-                updateOverview();
-            } else {
-                // รหัสผ่านไม่ถูกต้อง -> แจ้งเตือน
-                showMessage('รหัสผ่านไม่ถูกต้อง! กรุณาลองใหม่อีกครั้ง', 'error');
-                document.getElementById('delete-password').value = '';
-                document.getElementById('delete-password').focus();
+        function exportToCSV() {
+            if (inventory.length === 0) {
+                 showToast('⚠️ ไม่มีข้อมูลให้ส่งออก', 'warning');
+                 return;
             }
-        }
-
-        /**
-         * ฟังก์ชันลบข้อมูลจริงจาก IndexedDB, LocalStorage และ Cloud
-         */
-        async function deleteAllData() {
-            // ล้าง IndexedDB
-            await clearStore('inventory');
-            await clearStore('settings');
-
-            // ล้าง LocalStorage (ตัวสำรอง)
-            localStorage.removeItem('iot-inventory');
-            localStorage.removeItem('iot-settings');
-            localStorage.removeItem('iot-shared-data');
             
-            // รีเซ็ตข้อมูลในหน่วยความจำ
-            inventory = [];
-            settings = {};
-            
-            // ซิงค์การลบไปที่ Cloud (ถ้าเชื่อมต่ออยู่)
-            await shareUpdate(); // ส่งข้อมูลว่างเปล่าไป Cloud เพื่อบอกว่าถูกลบแล้ว
+            const header = ["Serial Number", "หมวดหมู่", "สถานะ", "วันที่รับเข้า", "ผู้เบิก (ID พนักงาน)", "วันที่เบิก"];
+            const csvRows = [];
+            csvRows.push(header.join(','));
 
-            console.log('All data deleted successfully.');
+            inventory.forEach(item => {
+                const values = [
+                    `"${item.SN}"`, // ใส่ quotes เผื่อมี comma ใน SN
+                    `"${item.Category}"`,
+                    `"${item.Status === 'Available' ? 'คงเหลือ' : 'เบิกแล้ว'}"`,
+                    `"${item.ReceiveDate}"`,
+                    `"${item.Technician || ''}"`,
+                    `"${item.WithdrawDate || ''}"`
+                ];
+                csvRows.push(values.join(','));
+            });
+
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'inventory_report_' + new Date().toISOString().split('T')[0] + '.csv');
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('📊 ส่งออกข้อมูล CSV สำเร็จ', 'success');
         }
 
-        // --- Initialization ---
+        function backupData() {
+            const data = {
+                inventory: inventory,
+                categories: categories,
+                settings: settings
+            };
+            
+            const jsonString = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'store_manager_backup_' + new Date().toISOString().split('T')[0] + '.json');
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('💾 สำรองข้อมูล (JSON) สำเร็จ', 'success');
+        }
 
-        window.onload = async () => {
-            await initDB();
-            await loadSharedData();
-            loadSettings();
-            initSyncSystem();
-            showTab('overview'); // Start on the overview tab
-        };
-        
-        // BroadcastChannel for real-time update between tabs/windows
-        const channel = new BroadcastChannel('iot-inventory-channel');
-        channel.onmessage = async (event) => {
-            if (event.data.action === 'dataUpdate' && !isUpdatingFromSync) {
-                console.log('Broadcast received, checking for updates...');
-                // Force a full update from cloud/local to ensure consistency
-                await loadSharedData(); 
+        function clearAllData() {
+            if (confirm("⚠️ คำเตือน: คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลทั้งหมดในคลังสินค้าและหมวดหมู่ (รวมถึง Apps Script URL)? การกระทำนี้ไม่สามารถยกเลิกได้!")) {
+                inventory = [];
+                categories = []; // <--- แก้ไขแล้ว
+                settings = { webAppUrl: '' };
+                
+                localStorage.removeItem('storeInventory');
+                localStorage.removeItem('storeCategories');
+                localStorage.removeItem('storeSettings');
+                
+                loadSettings();
+                showPage('dashboard');
+                clearReceiveForm();
+                clearWithdrawForm();
+                updateAllDisplays();
+                showToast('🗑️ ล้างข้อมูลทั้งหมดสำเร็จแล้ว', 'success');
             }
-        };
+        }
 
-        // Override the shareUpdate to also broadcast
-        const originalShareUpdate = shareUpdate;
-        shareUpdate = async function() {
-            await originalShareUpdate();
-            // Send broadcast to other local tabs/windows
-            channel.postMessage({ action: 'dataUpdate', timestamp: Date.now() });
-        };
-        
-        // Call shareUpdate when settings change to keep other tabs/devices updated
-        const originalSaveSettings = saveSettings;
-        saveSettings = async function() {
-            await originalSaveSettings();
-            await shareUpdate();
-        };
+        function printReport() {
+            // สั่งให้แสดงหน้า Inventory ก่อนพิมพ์
+            showPage('inventory');
+            setTimeout(() => {
+                window.print();
+            }, 100); 
+        }
 
     </script>
 </body>
