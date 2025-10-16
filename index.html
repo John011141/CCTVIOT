@@ -55,8 +55,9 @@
             to { opacity: 1; transform: translateX(0); }
         }
         @keyframes fadeOut {
-            from { opacity: 1; }
-            to { opacity: 0; }
+            0% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
         }
 
         /* Print Styles */
@@ -70,6 +71,9 @@
             #inventoryPagination { display: none; }
             table { font-size: 9pt; width: 100%; border-collapse: collapse; }
             th, td { padding: 4px 6px; border: 1px solid #ddd; }
+            /* กำหนดให้สถานะที่เบิกแล้วเป็นสีเทาในการพิมพ์ */
+            .status-withdrawn { color: #666 !important; } 
+            .status-available { color: #000 !important; font-weight: bold; }
         }
     </style>
 </head>
@@ -79,7 +83,7 @@
 
     <script>
         // WEB_APP_URL จะถูกโหลดจาก Local Storage ในฟังก์ชัน loadSettings()
-        const DEFAULT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxgEUYIySWgu7hKF424sn4HaNcXy9lMhdPIqXNF5-qZSdGVFjCT8yLtz5_5d5M2pZtt/exec"; 
+        const DEFAULT_WEB_APP_URL = "URL APPS SCRIPT WEB APP"; // กรุณาเปลี่ยนเป็น URL จริงของคุณ
     </script>
 
     <nav class="bg-white shadow-lg sticky top-0 z-50">
@@ -187,7 +191,7 @@
                                     <input type="text" id="newCategoryInput" 
                                             placeholder="เพิ่มหมวดหมู่ใหม่" 
                                             class="flex-grow px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <button type="button" onclick="addNewCategory()" 
+                                    <button type="button" onclick="addNewCategory(document.getElementById('newCategoryInput').value, 'receive')" 
                                             class="bg-gray-700 hover:bg-gray-800 text-white px-4 py-3 rounded-xl transition-colors font-medium text-sm whitespace-nowrap">
                                         + เพิ่ม
                                     </button>
@@ -230,7 +234,7 @@
                                         placeholder="ใส่ Serial Number ที่ต้องการเบิก&#10;&#10;ตัวอย่าง:&#10;SN-PRT-001&#10;SN-PRT-002" 
                                         class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-base" required></textarea>
                             <button type="button" onclick="checkAvailability()" 
-                                        class="mt-2 text-sm text-orange-600 hover:text-orange-700 underline font-medium">
+                                            class="mt-2 text-sm text-orange-600 hover:text-orange-700 underline font-medium">
                                 🔍 ตรวจสอบความพร้อม
                             </button>
                         </div>
@@ -330,7 +334,7 @@
                         <div>
                             <label for="webAppUrl" class="block text-sm font-medium text-gray-700 mb-2">Google Apps Script Web App URL</label>
                             <input type="url" id="webAppUrl" placeholder="ใส่ URL ที่ได้จากการ Deploy Apps Script" 
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm" required>
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm" required>
                         </div>
                         <div id="connectionStatus" class="text-sm font-medium">
                             <span class="text-gray-500">สถานะ: ยังไม่ได้บันทึก URL</span>
@@ -441,7 +445,7 @@
                 <div>
                     <label for="editTechnician" class="block text-sm font-medium text-gray-700 mb-2">👤 ผู้เบิก (เฉพาะรายการที่เบิกแล้ว)</label>
                     <input type="text" id="editTechnician" placeholder="ชื่อ/ID ผู้เบิก" 
-                           class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <div class="flex justify-end space-x-3 pt-4">
@@ -465,27 +469,81 @@
         // 1. ตัวแปรและโหลดข้อมูลเริ่มต้น
         // =============================================================
 
-        let inventory = JSON.parse(localStorage.getItem('storeInventory')) || [];
-        let categories = JSON.parse(localStorage.getItem('storeCategories')) || []; // <--- แก้ไขแล้ว
+        let inventory = [];
+        let categories = []; 
         let settings = JSON.parse(localStorage.getItem('storeSettings')) || { webAppUrl: DEFAULT_WEB_APP_URL };
         let currentPage = 'dashboard';
         const ITEMS_PER_PAGE = 10;
         let currentInventoryPage = 1;
+        let filteredInventory = []; // สำหรับเก็บรายการที่ถูกกรอง/ค้นหา
 
         document.addEventListener('DOMContentLoaded', function() {
             loadSettings();
+            initializeDataFromSheets(); // <-- โหลดข้อมูลจาก Apps Script
             showPage('dashboard');
-            updateAllDisplays();
             updateDateTime();
             setInterval(updateDateTime, 1000); 
         });
 
+        // --------------------------------------------------------------------
+        // [ใหม่] ฟังก์ชันสำหรับโหลดข้อมูลเริ่มต้นจาก Apps Script
+        // --------------------------------------------------------------------
+        async function initializeDataFromSheets() {
+            const url = settings.webAppUrl;
+            
+            // ใช้ข้อมูล Local Storage เป็นแผนสำรองเสมอ
+            inventory = JSON.parse(localStorage.getItem('storeInventory')) || [];
+            categories = JSON.parse(localStorage.getItem('storeCategories')) || [];
+            updateAllDisplays(); // แสดงข้อมูลสำรองไปก่อน
+
+            if (!url || url === DEFAULT_WEB_APP_URL) {
+                showToast('⚠️ กรุณาตั้งค่า Apps Script URL ที่หน้า "ตั้งค่า". โหลดข้อมูลจาก Local Storage', 'warning');
+                return;
+            }
+
+            showToast('⏳ กำลังดึงข้อมูลเริ่มต้นจาก Google Sheets...', 'info');
+            
+            try {
+                // ใช้ GET request เพื่อเรียก doGet(e)
+                const response = await fetch(url, {
+                    method: 'GET', // ใช้ GET
+                    mode: 'cors'
+                });
+                
+                const result = await response.json();
+
+                if (result.status === 'success' && result.data) {
+                    // อัปเดตตัวแปร Inventory และ Categories ด้วยข้อมูลจาก Sheets
+                    inventory = result.data.inventory || [];
+                    categories = result.data.categories || [];
+
+                    // บันทึกข้อมูลที่เพิ่งโหลดมาใน Local Storage (เพื่อใช้เวลา Offline)
+                    localStorage.setItem('storeInventory', JSON.stringify(inventory));
+                    localStorage.setItem('storeCategories', JSON.stringify(categories));
+
+                    showToast(`✅ โหลดข้อมูล ${inventory.length} รายการสำเร็จ!`, 'success');
+                } else {
+                    showToast(`❌ ดึงข้อมูลล้มเหลว: ${result.message}. ใช้ข้อมูล Local Storage สำรอง.`, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Initial data fetch error:', error);
+                showToast('❌ การเชื่อมต่อล้มเหลว (GET). ใช้ข้อมูลสำรอง Local Storage', 'error');
+            }
+
+            updateAllDisplays(); 
+        }
+
+        // --------------------------------------------------------------------
+        // ฟังก์ชันช่วยแสดงผลและ UI
+        // --------------------------------------------------------------------
+
         function loadSettings() {
-            if (settings.webAppUrl) {
+            if (settings.webAppUrl && settings.webAppUrl !== DEFAULT_WEB_APP_URL) {
                 document.getElementById('webAppUrl').value = settings.webAppUrl;
                 updateConnectionStatus('active', '✅ เชื่อมต่อ URL แล้ว');
             } else {
-                document.getElementById('webAppUrl').value = '';
+                document.getElementById('webAppUrl').value = DEFAULT_WEB_APP_URL;
                 updateConnectionStatus('inactive', '⚠️ ยังไม่ได้ตั้งค่า URL Apps Script');
             }
         }
@@ -493,12 +551,22 @@
         function updateConnectionStatus(type, message) {
             const statusEl = document.getElementById('connectionStatus');
             let color = 'gray';
-            if (type === 'active') color = 'green';
-            else if (type === 'error') color = 'red';
-            else if (type === 'test-success') color = 'blue';
-            else if (type === 'test-fail') color = 'red';
+            if (type === 'active' || type === 'test-success') color = 'green';
+            else if (type === 'error' || type === 'test-fail') color = 'red';
+            else if (type === 'testing') color = 'yellow';
 
             statusEl.innerHTML = `<span class="text-${color}-600">${message}</span>`;
+        }
+
+        function updateDateTime() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('th-TH', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            document.getElementById('currentDate').textContent = dateStr;
+            document.getElementById('withdrawDate').textContent = dateStr;
         }
 
         function showToast(message, type = 'success') {
@@ -529,6 +597,28 @@
             }, 4000); 
         }
 
+        function showPage(pageId) {
+            currentPage = pageId;
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            document.getElementById(pageId).classList.add('active', 'fade-in');
+
+            document.querySelectorAll('.nav-item').forEach(nav => {
+                nav.classList.remove('active');
+            });
+            document.getElementById(`nav-${pageId}`).classList.add('active');
+
+            // อัปเดตข้อมูลเฉพาะหน้าที่ถูกเรียก
+            if (pageId === 'inventory') {
+                filterInventory(); // โหลดตารางสินค้า
+            } else if (pageId === 'receive') {
+                renderCategoryButtons('receive');
+            } else if (pageId === 'dashboard') {
+                updateDashboard();
+            }
+        }
+
         // =============================================================
         // 2. ฟังก์ชันจัดการข้อมูล (Local Storage & Sync)
         // =============================================================
@@ -540,111 +630,365 @@
 
         function saveCategories() {
             // กรองหมวดหมู่ที่ซ้ำและเรียงลำดับ
-            categories = [...new Set(categories)].sort(); 
+            categories = [...new Set(categories.map(c => String(c).trim()).filter(c => c))].sort(); 
             localStorage.setItem('storeCategories', JSON.stringify(categories));
             updateAllDisplays(); 
-        }
-
-        // ฟังก์ชันสมมติสำหรับส่งข้อมูลไปยัง Google Apps Script
-        async function fetchData(action, payload) {
-            const url = settings.webAppUrl;
-            if (!url) {
-                showToast('❌ ไม่ได้ตั้งค่า Apps Script URL', 'error');
-                return { success: false, message: 'Apps Script URL not set.' };
-            }
-            
-            // payload คือ Object ที่จะรวม action และ data
-            const params = { action: action, data: JSON.stringify(payload) };
-            
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams(params).toString()
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    showToast(`☁️ ซิงค์ข้อมูล ${action} สำเร็จ`, 'info');
-                    return { success: true, message: result.message };
-                } else {
-                    showToast(`⚠️ ซิงค์ข้อมูล ${action} ล้มเหลว: ${result.message}`, 'warning');
-                    return { success: false, message: result.message };
-                }
-
-            } catch (error) {
-                console.error('Error syncing with Apps Script:', error);
-                showToast(`🚨 ข้อผิดพลาดในการเชื่อมต่อ Apps Script: ${error.message}`, 'error');
-                return { success: false, message: error.message };
-            }
-        }
-
-        // =============================================================
-        // 3. ฟังก์ชันหน้า UI & General
-        // =============================================================
-
-        function showPage(pageId) {
-            document.querySelectorAll('.page').forEach(page => page.classList.remove('active', 'fade-in'));
-            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
-            
-            const activePage = document.getElementById(pageId);
-            const activeNav = document.getElementById('nav-' + pageId);
-            
-            if (activePage) activePage.classList.add('active', 'fade-in');
-            if (activeNav) activeNav.classList.add('active');
-            
-            currentPage = pageId;
-            
-            if (pageId === 'inventory') {
-                currentInventoryPage = 1;
-                updateInventoryDisplay();
-            } else if (pageId === 'receive') {
-                renderCategoryButtons('categorySelection', 'selectedCategory');
-            } else if (pageId === 'dashboard') {
-                updateDashboard();
-            }
+            renderCategoryButtons('receive');
+            renderCategoryButtons('modal');
+            renderCategoryButtons('edit'); // อัปเดตเมื่อมีการเพิ่ม/แก้ไขหมวดหมู่
         }
 
         function updateAllDisplays() {
             updateDashboard();
-            updateRecentItems();
-            renderCategoryButtons('categorySelection', 'selectedCategory'); 
-            renderCategoryButtons('modalCategorySelection', 'modalSelectedCategory');
-            // ไม่ต้องเรียก updateInventoryDisplay() ที่นี่ เพราะถูกเรียกใน showPage('inventory')
+            if (currentPage === 'inventory') {
+                filterInventory();
+            }
+            renderCategoryButtons('receive');
+            renderCategoryButtons('modal');
         }
 
-        function updateDateTime() {
-            const now = new Date();
-            // รูปแบบ dd/mm/yyyy
-            const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' }); 
-            // รูปแบบ YYYY-MM-DD สำหรับ log/sheets
-            const dateLogFormat = now.toISOString().split('T')[0]; 
+        // --------------------------------------------------------------------
+        // Dashboard
+        // --------------------------------------------------------------------
+
+        function updateDashboard() {
+            const total = inventory.length;
+            const available = inventory.filter(item => item.status === 'Available').length;
+            const withdrawn = total - available;
             
-            const currentDateEl = document.getElementById('currentDate');
-            const withdrawDateEl = document.getElementById('withdrawDate');
-            
-            if (currentDateEl) currentDateEl.textContent = dateStr;
-            if (withdrawDateEl) withdrawDateEl.textContent = dateStr;
-            return dateLogFormat; 
+            document.getElementById('dash-total').textContent = total;
+            document.getElementById('dash-available').textContent = available;
+            document.getElementById('dash-withdrawn').textContent = withdrawn;
+            document.getElementById('dash-categories').textContent = categories.length;
+
+            // แสดงรายการล่าสุด (Last 5 items received/withdrawn)
+            const recentItemsEl = document.getElementById('recentItems');
+            recentItemsEl.innerHTML = '';
+
+            // เรียงตามวันที่รับเข้า/วันที่เบิก (ใช้ Date Received เป็นหลัก ถ้าไม่มีให้ใช้วันที่เบิก)
+            const sortedInventory = [...inventory].sort((a, b) => {
+                const dateA = new Date(a.dateWithdrawn || a.dateReceived);
+                const dateB = new Date(b.dateWithdrawn || b.dateReceived);
+                return dateB - dateA;
+            });
+
+            const recent = sortedInventory.slice(0, 5);
+
+            if (recent.length === 0) {
+                 recentItemsEl.innerHTML = '<p class="text-sm text-gray-500">ไม่มีรายการล่าสุด</p>';
+            } else {
+                recent.forEach(item => {
+                    const statusText = item.status === 'Withdrawn' ? '📤 เบิกแล้ว' : '📥 รับเข้า';
+                    const dateText = item.status === 'Withdrawn' ? item.dateWithdrawn : item.dateReceived;
+                    const techText = item.status === 'Withdrawn' && item.technician ? ` | ผู้เบิก: ${item.technician}` : '';
+                    
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'flex justify-between items-center text-sm border-b pb-1 last:border-b-0';
+                    itemEl.innerHTML = `
+                        <p class="font-medium text-gray-700">${item.serialNumber}</p>
+                        <p class="text-gray-500 text-xs">${statusText} ${dateText} ${techText}</p>
+                    `;
+                    recentItemsEl.appendChild(itemEl);
+                });
+            }
         }
-        
+
+        // --------------------------------------------------------------------
+        // Category Management
+        // --------------------------------------------------------------------
+
+        function renderCategoryButtons(target) {
+            let containerId;
+            let hiddenInputId;
+            
+            if (target === 'receive') {
+                containerId = 'categorySelection';
+                hiddenInputId = 'selectedCategory';
+            } else if (target === 'modal') {
+                containerId = 'modalCategorySelection';
+                hiddenInputId = 'modalSelectedCategory';
+            } else if (target === 'edit') {
+                containerId = 'editCategorySelection';
+                hiddenInputId = 'editSelectedCategory';
+            } else {
+                return;
+            }
+
+            const container = document.getElementById(containerId);
+            const hiddenInput = document.getElementById(hiddenInputId);
+            const currentSelected = hiddenInput.value;
+
+            container.innerHTML = '';
+
+            if (categories.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-500 w-full">ยังไม่มีหมวดหมู่</p>';
+                return;
+            }
+
+            categories.forEach(category => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = category;
+                button.className = `category-button px-3 py-1 text-sm rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100`;
+                
+                if (category === currentSelected) {
+                    button.classList.add('selected');
+                }
+
+                button.onclick = () => selectCategory(category, hiddenInputId, containerId);
+                container.appendChild(button);
+            });
+
+            // Re-select category if it exists
+            if (currentSelected) {
+                selectCategory(currentSelected, hiddenInputId, containerId);
+            }
+        }
+
+        function selectCategory(category, hiddenInputId, containerId) {
+            const hiddenInput = document.getElementById(hiddenInputId);
+            const container = document.getElementById(containerId);
+            
+            hiddenInput.value = category;
+
+            // Update button styles
+            container.querySelectorAll('.category-button').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+
+            const selectedButton = Array.from(container.querySelectorAll('.category-button')).find(btn => btn.textContent === category);
+            if (selectedButton) {
+                selectedButton.classList.add('selected');
+            }
+        }
+
+        function addNewCategory(newCategory, target) {
+            newCategory = newCategory ? String(newCategory).trim() : '';
+            if (!newCategory) {
+                showToast('กรุณากรอกชื่อหมวดหมู่ใหม่', 'warning');
+                return;
+            }
+            
+            if (categories.includes(newCategory)) {
+                showToast(`หมวดหมู่ "${newCategory}" มีอยู่แล้ว`, 'warning');
+            } else {
+                categories.push(newCategory);
+                saveCategories();
+                showToast(`เพิ่มหมวดหมู่ "${newCategory}" สำเร็จ`, 'success');
+            }
+            
+            // เลือกหมวดหมู่ที่เพิ่มใหม่และเคลียร์ input
+            let hiddenInputId;
+            if (target === 'receive') hiddenInputId = 'selectedCategory';
+            else if (target === 'modal') hiddenInputId = 'modalSelectedCategory';
+            
+            if (hiddenInputId) {
+                selectCategory(newCategory, hiddenInputId, target === 'receive' ? 'categorySelection' : 'modalCategorySelection');
+            }
+            document.getElementById('newCategoryInput').value = '';
+        }
+
+        // =============================================================
+        // 3. ฟังก์ชันรับเข้าสินค้า (Receive)
+        // =============================================================
+
+        async function addItems(event) {
+            event.preventDefault();
+            
+            const serialNumbersText = document.getElementById('serialNumbers').value;
+            const category = document.getElementById('selectedCategory').value;
+            const submitBtn = document.getElementById('receiveSubmitBtn');
+            const spinner = document.getElementById('receiveSpinner');
+
+            if (!category) {
+                showToast('❌ กรุณาเลือกหมวดหมู่สินค้า', 'error');
+                return;
+            }
+
+            const sns = serialNumbersText.split('\n')
+                                        .map(sn => sn.trim())
+                                        .filter(sn => sn);
+            
+            if (sns.length === 0) {
+                showToast('❌ กรุณาใส่ Serial Number อย่างน้อย 1 รายการ', 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            const itemsToAdd = sns.map(sn => ({
+                serialNumber: sn,
+                category: category,
+                dateReceived: now,
+                status: 'Available',
+                technician: '',
+                dateWithdrawn: ''
+            }));
+            
+            try {
+                // 1. Sync Data to Google Sheets
+                const syncResult = await sendToGoogleSheets('addItems', itemsToAdd);
+
+                if (syncResult.success) {
+                    // 2. Update Local Inventory on successful sync
+                    inventory.unshift(...itemsToAdd); // เพิ่มไปด้านบน
+                    saveInventory(); 
+                    clearReceiveForm();
+                    showToast(syncResult.message, 'success');
+                } else {
+                    showToast(`❌ ข้อผิดพลาดในการบันทึก: ${syncResult.message}. (ไม่ได้บันทึกใน Local Storage)`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Add Items Error:', error);
+                showToast('❌ การเชื่อมต่อล้มเหลว (POST). กรุณาตรวจสอบ Apps Script URL', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
         function clearReceiveForm() {
             document.getElementById('serialNumbers').value = '';
-            document.getElementById('newCategoryInput').value = '';
             document.getElementById('selectedCategory').value = '';
-            
-            document.querySelectorAll('#categorySelection .category-button').forEach(btn => {
-                btn.classList.remove('selected', 'bg-emerald-500', 'text-white');
-                btn.classList.add('border-emerald-500', 'text-emerald-600', 'hover:bg-emerald-50');
-            });
+            renderCategoryButtons('receive');
         }
-        
+
+        // =============================================================
+        // 4. ฟังก์ชันเบิกจ่ายสินค้า (Withdraw)
+        // =============================================================
+
+        function getItemsForWithdrawal(sns) {
+            const items = [];
+            const notFound = [];
+            const notAvailable = [];
+
+            sns.forEach(sn => {
+                const item = inventory.find(i => i.serialNumber === sn);
+                if (!item) {
+                    notFound.push(sn);
+                } else if (item.status === 'Withdrawn') {
+                    notAvailable.push(sn);
+                } else {
+                    items.push(item);
+                }
+            });
+
+            return { items, notFound, notAvailable };
+        }
+
+        function checkAvailability() {
+            const serialNumbersText = document.getElementById('withdrawSN').value;
+            const sns = serialNumbersText.split('\n').map(sn => sn.trim()).filter(sn => sn);
+            const resultsDiv = document.getElementById('checkResults');
+            const availabilityCheckDiv = document.getElementById('availabilityCheck');
+
+            if (sns.length === 0) {
+                availabilityCheckDiv.classList.add('hidden');
+                return;
+            }
+
+            const { items, notFound, notAvailable } = getItemsForWithdrawal(sns);
+            
+            resultsDiv.innerHTML = '';
+
+            if (items.length > 0) {
+                resultsDiv.innerHTML += `<p class="text-emerald-600 font-medium">✅ ${items.length} รายการพร้อมเบิก:</p>`;
+                items.forEach(item => {
+                    resultsDiv.innerHTML += `<p class="ml-4 text-sm text-emerald-800">- ${item.serialNumber} (${item.category})</p>`;
+                });
+            }
+
+            if (notFound.length > 0) {
+                resultsDiv.innerHTML += `<p class="text-red-600 font-medium mt-2">❌ ${notFound.length} รายการไม่พบในคลัง:</p>`;
+                notFound.forEach(sn => {
+                    resultsDiv.innerHTML += `<p class="ml-4 text-sm text-red-800">- ${sn}</p>`;
+                });
+            }
+
+            if (notAvailable.length > 0) {
+                resultsDiv.innerHTML += `<p class="text-orange-600 font-medium mt-2">⚠️ ${notAvailable.length} รายการถูกเบิกไปแล้ว:</p>`;
+                notAvailable.forEach(sn => {
+                    const item = inventory.find(i => i.serialNumber === sn);
+                    resultsDiv.innerHTML += `<p class="ml-4 text-sm text-orange-800">- ${sn} (ผู้เบิก: ${item.technician || 'N/A'})</p>`;
+                });
+            }
+
+            availabilityCheckDiv.classList.remove('hidden');
+        }
+
+        async function withdrawItems(event) {
+            event.preventDefault();
+            
+            const serialNumbersText = document.getElementById('withdrawSN').value;
+            const technicianName = document.getElementById('technicianName').value.trim();
+            const submitBtn = document.getElementById('withdrawSubmitBtn');
+            const spinner = document.getElementById('withdrawSpinner');
+
+            const sns = serialNumbersText.split('\n')
+                                        .map(sn => sn.trim())
+                                        .filter(sn => sn);
+
+            if (!technicianName) {
+                showToast('❌ กรุณาใส่ชื่อผู้เบิก / ID พนักงาน', 'error');
+                return;
+            }
+
+            if (sns.length === 0) {
+                showToast('❌ กรุณาใส่ Serial Number อย่างน้อย 1 รายการ', 'error');
+                return;
+            }
+            
+            const { items, notFound, notAvailable } = getItemsForWithdrawal(sns);
+
+            if (items.length === 0) {
+                showToast('❌ ไม่มีรายการพร้อมเบิก กรุณาตรวจสอบความพร้อม', 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            const itemsToUpdate = items.map(item => ({
+                serialNumber: item.serialNumber,
+                technician: technicianName,
+                dateWithdrawn: now
+            }));
+
+            try {
+                // 1. Sync Data to Google Sheets (จะอัปเดตเฉพาะ SN, Technician, DateWithdrawn ใน Inventory Sheet)
+                const syncResult = await sendToGoogleSheets('withdrawItems', itemsToUpdate);
+
+                if (syncResult.success) {
+                    // 2. Update Local Inventory on successful sync
+                    itemsToUpdate.forEach(updatedItem => {
+                        const index = inventory.findIndex(i => i.serialNumber === updatedItem.serialNumber);
+                        if (index !== -1) {
+                            inventory[index].status = 'Withdrawn';
+                            inventory[index].technician = updatedItem.technician;
+                            inventory[index].dateWithdrawn = updatedItem.dateWithdrawn;
+                        }
+                    });
+
+                    saveInventory(); 
+                    clearWithdrawForm();
+                    showToast(syncResult.message, 'success');
+                } else {
+                    showToast(`❌ ข้อผิดพลาดในการบันทึก: ${syncResult.message}.`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Withdraw Items Error:', error);
+                showToast('❌ การเชื่อมต่อล้มเหลว (POST). กรุณาตรวจสอบ Apps Script URL', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
         function clearWithdrawForm() {
             document.getElementById('withdrawSN').value = '';
             document.getElementById('technicianName').value = '';
@@ -652,689 +996,410 @@
             document.getElementById('checkResults').innerHTML = '';
         }
 
-        // =============================================================
-        // 4. ฟังก์ชันจัดการหมวดหมู่ (Category)
-        // =============================================================
-        
-        function renderCategoryButtons(containerId, inputId, currentCategory = '') {
-            const container = document.getElementById(containerId);
-            const input = document.getElementById(inputId);
-            container.innerHTML = '';
-            
-            if (categories.length === 0) {
-                 container.innerHTML = `<p class="text-sm text-gray-500 w-full">⚠️ ยังไม่มีหมวดหมู่ กรุณาเพิ่มใหม่ด้านล่าง</p>`;
-                 return;
-            }
-            
-            // ใช้ค่าจาก input.value หรือ currentCategory ที่ถูกส่งมา
-            const selectedCat = currentCategory || input.value;
 
-            categories.forEach(cat => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.textContent = cat;
-                
-                let isSelected = cat === selectedCat;
-                
-                button.className = `category-button px-3 py-1 rounded-full text-sm border transition-colors ${
-                    isSelected 
-                        ? 'selected bg-emerald-500 text-white border-emerald-500' 
-                        : 'border-emerald-500 text-emerald-600 hover:bg-emerald-50'
-                }`;
-                button.setAttribute('data-category', cat);
-                
-                button.onclick = () => {
-                    // ล้างการเลือกเดิมใน container นี้
-                    container.querySelectorAll('.category-button').forEach(btn => {
-                        btn.classList.remove('selected', 'bg-emerald-500', 'text-white', 'border-emerald-500');
-                        btn.classList.add('border-emerald-500', 'text-emerald-600', 'hover:bg-emerald-50');
-                    });
-                    
-                    // เลือกปุ่มปัจจุบัน
-                    button.classList.add('selected', 'bg-emerald-500', 'text-white', 'border-emerald-500');
-                    button.classList.remove('text-emerald-600', 'hover:bg-emerald-50');
-                    
-                    input.value = cat; 
-                };
-                container.appendChild(button);
+        // =============================================================
+        // 5. ฟังก์ชันตารางสินค้า (Inventory Table & CRUD)
+        // =============================================================
+
+        function filterInventory(page = 1) {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const searchSN = document.getElementById('searchSN').value.toLowerCase();
+            
+            filteredInventory = inventory.filter(item => {
+                const statusMatch = statusFilter === '' || item.status === statusFilter;
+                const searchMatch = searchSN === '' || 
+                                    item.serialNumber.toLowerCase().includes(searchSN) || 
+                                    item.category.toLowerCase().includes(searchSN);
+                return statusMatch && searchMatch;
             });
             
-            // ถ้ามี selectedCat ให้ตั้งค่า input และไฮไลท์ปุ่ม
-            if (selectedCat) {
-                 input.value = selectedCat;
-            } else {
-                input.value = '';
-            }
-
-            document.getElementById('dash-categories').textContent = categories.length;
+            currentInventoryPage = page;
+            renderInventoryTable(page);
         }
 
-        function addNewCategory() {
-            const inputEl = document.getElementById('newCategoryInput');
-            const newCat = inputEl.value.trim();
+        function renderInventoryTable(page) {
+            const tableBody = document.getElementById('inventoryTable');
+            const paginationDiv = document.getElementById('inventoryPagination');
             
-            if (newCat) {
-                 // ทำให้ตัวอักษรแรกเป็นตัวใหญ่ ที่เหลือตัวเล็ก
-                 const formattedCat = newCat.charAt(0).toUpperCase() + newCat.slice(1).toLowerCase();
+            tableBody.innerHTML = '';
+            paginationDiv.innerHTML = '';
 
-                if (!categories.includes(formattedCat)) {
-                    categories.push(formattedCat);
-                    saveCategories();
-                    inputEl.value = '';
-                    renderCategoryButtons('categorySelection', 'selectedCategory', formattedCat); // ส่งชื่อหมวดหมู่ที่เพิ่งเพิ่มไปเลือกทันที
-                    showToast(`✅ เพิ่มหมวดหมู่ "${formattedCat}" สำเร็จ`);
-                } else {
-                    showToast(`⚠️ หมวดหมู่ "${formattedCat}" มีอยู่แล้ว`, 'warning');
-                    // เลือกหมวดหมู่ที่มีอยู่แล้ว
-                    document.querySelector(`#categorySelection [data-category="${formattedCat}"]`).click();
-                    inputEl.value = '';
-                }
-            }
-        }
-        
-        // =============================================================
-        // 5. หน้า Dashboard
-        // =============================================================
-        
-        function updateDashboard() {
-            const total = inventory.length;
-            const available = inventory.filter(item => item.Status === 'Available').length;
-            const withdrawn = total - available;
-            
-            document.getElementById('dash-total').textContent = total;
-            document.getElementById('dash-available').textContent = available;
-            document.getElementById('dash-withdrawn').textContent = withdrawn;
-            document.getElementById('dash-categories').textContent = categories.length;
-            
-            updateRecentItems();
-        }
-        
-        function updateRecentItems() {
-            const recentContainer = document.getElementById('recentItems');
-            
-            // เรียงตามวันที่รับเข้า (สมมติว่า ReceiveDate สามารถเรียงได้)
-            const sortedInventory = [...inventory].sort((a, b) => new Date(b.ReceiveDate) - new Date(a.ReceiveDate));
-            const recentItems = sortedInventory.slice(0, 5);
-            
-            recentContainer.innerHTML = '';
-            
-            if (recentItems.length === 0) {
-                 recentContainer.innerHTML = `<p class="text-sm text-gray-500">ไม่มีรายการล่าสุด</p>`;
-                 return;
+            const totalItems = filteredInventory.length;
+            const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+
+            if (totalItems === 0) {
+                tableBody.innerHTML = '<tr class="text-center"><td colspan="7" class="py-4 text-gray-500">ไม่พบรายการสินค้า</td></tr>';
+                return;
             }
 
-            recentItems.forEach(item => {
-                const statusColor = item.Status === 'Available' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800';
+            const startIndex = (page - 1) * ITEMS_PER_PAGE;
+            const endIndex = startIndex + ITEMS_PER_PAGE;
+            const itemsToDisplay = filteredInventory.slice(startIndex, endIndex);
+
+            itemsToDisplay.forEach((item, index) => {
+                const row = tableBody.insertRow();
+                const statusClass = item.status === 'Withdrawn' ? 'bg-orange-50 text-gray-500 status-withdrawn' : 'bg-white text-gray-800 status-available';
+                row.className = `border-b border-gray-200 hover:bg-gray-50 ${statusClass}`;
                 
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm';
-                itemDiv.innerHTML = `
-                    <div class="truncate">
-                        <span class="font-medium text-gray-700">${item.SN}</span> 
-                        <span class="text-xs text-gray-500 ml-2">(${item.Category})</span>
-                    </div>
-                    <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusColor}">
-                        ${item.Status === 'Available' ? 'คงเหลือ' : 'เบิกแล้ว'}
-                    </span>
+                const statusColor = item.status === 'Available' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800';
+                
+                row.innerHTML = `
+                    <td class="px-4 py-3 font-medium">${item.serialNumber}</td>
+                    <td class="px-4 py-3 text-sm">${item.category}</td>
+                    <td class="px-4 py-3 text-sm">${item.dateReceived || 'N/A'}</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full ${statusColor}">
+                            ${item.status === 'Available' ? 'คงเหลือ' : 'เบิกแล้ว'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm">${item.technician || 'N/A'}</td>
+                    <td class="px-4 py-3 text-sm">${item.dateWithdrawn || 'N/A'}</td>
+                    <td class="px-4 py-3 text-center space-x-2">
+                        <button onclick="showEditItemModal('${item.serialNumber}')" class="text-blue-600 hover:text-blue-800 transition-colors">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="confirmDeleteItem('${item.serialNumber}')" class="text-red-600 hover:text-red-800 transition-colors">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
                 `;
-                recentContainer.appendChild(itemDiv);
-            });
-        }
-
-        // =============================================================
-        // 6. หน้า Receive (รับเข้า)
-        // =============================================================
-
-        async function addItems(event) {
-            event.preventDefault();
-            
-            const submitBtn = document.getElementById('receiveSubmitBtn');
-            const spinner = document.getElementById('receiveSpinner');
-            
-            submitBtn.disabled = true;
-            spinner.classList.remove('hidden');
-
-            const serialNumbersText = document.getElementById('serialNumbers').value.toUpperCase();
-            const snList = serialNumbersText.split('\n').map(sn => sn.trim()).filter(sn => sn.length > 0);
-            const category = document.getElementById('selectedCategory').value;
-            const receiveDate = updateDateTime(); 
-
-            if (!category) {
-                showToast(document.getElementById('selectedCategory').dataset.validationMessage, 'error');
-                submitBtn.disabled = false;
-                spinner.classList.add('hidden');
-                return;
-            }
-
-            const newItems = [];
-            const duplicateSNs = [];
-            const existingSNs = inventory.map(item => item.SN);
-
-            // 1. ตรวจสอบ SN ซ้ำก่อน
-            snList.forEach(sn => {
-                if (existingSNs.includes(sn)) {
-                    duplicateSNs.push(sn);
-                } else {
-                    newItems.push({
-                        SN: sn,
-                        Category: category,
-                        Status: 'Available',
-                        ReceiveDate: receiveDate,
-                        WithdrawDate: '',
-                        Technician: ''
-                    });
-                }
             });
 
-            if (duplicateSNs.length > 0) {
-                showToast(`⚠️ ไม่สามารถรับเข้า ${duplicateSNs.length} รายการ: มี Serial Number ซ้ำ`, 'error');
-                console.error('Duplicate SNs:', duplicateSNs);
-            }
-            
-            if (newItems.length > 0) {
-                // เพิ่มเข้า Local Inventory
-                inventory.push(...newItems);
-                saveInventory(); 
-                clearReceiveForm();
-                showToast(`✅ รับสินค้าเข้าคลังสำเร็จ ${newItems.length} รายการ`, 'success');
+            // Pagination Controls
+            if (totalPages > 1) {
+                let paginationHtml = '';
+                
+                // Previous button
+                paginationHtml += `<button onclick="filterInventory(${page - 1})" ${page === 1 ? 'disabled' : ''} class="px-3 py-1 text-sm rounded-l-lg border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">ก่อนหน้า</button>`;
 
-                // 2. ส่งข้อมูลไป Apps Script (ถ้าตั้งค่าแล้ว)
-                if (settings.webAppUrl) {
-                    await fetchData('add', newItems); 
+                // Page buttons
+                for (let i = 1; i <= totalPages; i++) {
+                    const activeClass = i === page ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100';
+                    paginationHtml += `<button onclick="filterInventory(${i})" class="px-3 py-1 text-sm border-t border-b border-gray-300 ${activeClass}">${i}</button>`;
                 }
-            } else if (duplicateSNs.length === snList.length) {
-                showToast(`❌ ไม่มีการรับเข้าสำเร็จเลย: Serial Number ซ้ำทั้งหมด`, 'error');
-            }
 
-            submitBtn.disabled = false;
-            spinner.classList.add('hidden');
-        }
-        
-        function addSingleItem(event) {
-            event.preventDefault();
-            
-            const sn = document.getElementById('modalSN').value.toUpperCase().trim();
-            const category = document.getElementById('modalSelectedCategory').value;
-            const receiveDate = updateDateTime(); 
+                // Next button
+                paginationHtml += `<button onclick="filterInventory(${page + 1})" ${page === totalPages ? 'disabled' : ''} class="px-3 py-1 text-sm rounded-r-lg border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">ถัดไป</button>`;
 
-            if (!category) {
-                 showToast(document.getElementById('modalSelectedCategory').dataset.validationMessage, 'error');
-                 return;
-            }
-            
-            if (inventory.some(item => item.SN === sn)) {
-                showToast(`⚠️ Serial Number "${sn}" มีอยู่ในคลังแล้ว`, 'error');
-                return;
-            }
-
-            const newItem = {
-                SN: sn,
-                Category: category,
-                Status: 'Available',
-                ReceiveDate: receiveDate,
-                WithdrawDate: '',
-                Technician: ''
-            };
-
-            inventory.push(newItem);
-            saveInventory();
-            hideAddItemModal();
-            
-            showToast(`✅ เพิ่มรายการ "${sn}" สำเร็จ`, 'success');
-
-            // ส่งข้อมูลไป Apps Script
-            if (settings.webAppUrl) {
-                fetchData('add', [newItem]); 
+                paginationDiv.innerHTML = paginationHtml;
             }
         }
-        
+
         function showAddItemModal() {
             document.getElementById('addItemModal').classList.remove('hidden');
-            document.getElementById('modalSN').value = '';
-            // ตรวจสอบให้แน่ใจว่าได้ Render Category ปุ่มแล้ว
-            renderCategoryButtons('modalCategorySelection', 'modalSelectedCategory');
+            document.getElementById('modalSN').focus();
+            renderCategoryButtons('modal');
+            document.getElementById('modalSelectedCategory').value = '';
         }
 
         function hideAddItemModal() {
             document.getElementById('addItemModal').classList.add('hidden');
+            document.getElementById('modalSN').value = '';
+            document.getElementById('modalSelectedCategory').value = '';
+            renderCategoryButtons('modal'); // clear selection
         }
 
-        // =============================================================
-        // 7. หน้า Withdraw (เบิกจ่าย)
-        // =============================================================
-
-        function checkAvailability() {
-            const snText = document.getElementById('withdrawSN').value.toUpperCase();
-            const snList = snText.split('\n').map(sn => sn.trim()).filter(sn => sn.length > 0);
-            const checkResults = document.getElementById('checkResults');
-            const checkContainer = document.getElementById('availabilityCheck');
-            checkResults.innerHTML = '';
-            checkContainer.classList.remove('hidden');
-            
-            if (snList.length === 0) {
-                 checkResults.innerHTML = `<p class="text-sm text-gray-500">กรุณาใส่ Serial Number เพื่อตรวจสอบ</p>`;
-                 return;
-            }
-
-            let allAvailable = true;
-
-            snList.forEach(sn => {
-                const item = inventory.find(i => i.SN === sn);
-                const resultDiv = document.createElement('p');
-                resultDiv.className = 'text-sm';
-
-                if (!item) {
-                    resultDiv.innerHTML = `<span class="text-red-500 font-medium">${sn}</span>: ❌ ไม่พบในคลัง`;
-                    allAvailable = false;
-                } else if (item.Status === 'Withdrawn') {
-                    resultDiv.innerHTML = `<span class="text-orange-500 font-medium">${sn}</span>: ⚠️ ถูกเบิกไปแล้ว โดย ${item.Technician} (${item.WithdrawDate})`;
-                    allAvailable = false;
-                } else {
-                    resultDiv.innerHTML = `<span class="text-emerald-500 font-medium">${sn}</span>: ✅ พร้อมเบิก (${item.Category})`;
-                }
-                checkResults.appendChild(resultDiv);
-            });
-            
-            if (allAvailable && snList.length > 0) {
-                showToast('✅ รายการทั้งหมดพร้อมเบิกจ่าย', 'success');
-            } else if (!allAvailable) {
-                showToast('⚠️ พบรายการที่ไม่พร้อมเบิกจ่าย (โปรดตรวจสอบรายละเอียด)', 'warning');
-            }
-        }
-
-        async function withdrawItems(event) {
+        async function addSingleItem(event) {
             event.preventDefault();
             
-            const submitBtn = document.getElementById('withdrawSubmitBtn');
-            const spinner = document.getElementById('withdrawSpinner');
-            
+            const sn = document.getElementById('modalSN').value.trim();
+            const category = document.getElementById('modalSelectedCategory').value;
+            const submitBtn = document.getElementById('modalSubmitBtn');
+            const spinner = document.getElementById('modalSpinner');
+
+            if (!sn || !category) {
+                showToast('❌ กรุณากรอก Serial Number และเลือกหมวดหมู่', 'error');
+                return;
+            }
+
+            const existingItem = inventory.find(i => i.serialNumber === sn);
+            if (existingItem) {
+                 showToast(`❌ Serial Number "${sn}" มีอยู่ในคลังแล้ว (${existingItem.status})`, 'error');
+                return;
+            }
+
             submitBtn.disabled = true;
             spinner.classList.remove('hidden');
 
-            const snText = document.getElementById('withdrawSN').value.toUpperCase();
-            const snList = snText.split('\n').map(sn => sn.trim()).filter(sn => sn.length > 0);
-            const technicianName = document.getElementById('technicianName').value.trim();
-            const withdrawDate = updateDateTime();
-            
-            if (snList.length === 0 || !technicianName) {
-                showToast('❌ กรุณากรอก Serial Number และชื่อผู้เบิก', 'error');
+            const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            const item = [{
+                serialNumber: sn,
+                category: category,
+                dateReceived: now,
+                status: 'Available',
+                technician: '',
+                dateWithdrawn: ''
+            }];
+
+            try {
+                const syncResult = await sendToGoogleSheets('addItems', item);
+
+                if (syncResult.success) {
+                    inventory.unshift(item[0]); // เพิ่มรายการใหม่
+                    saveInventory(); 
+                    hideAddItemModal();
+                    showToast(`✅ เพิ่มรายการ ${sn} สำเร็จ`, 'success');
+                } else {
+                    showToast(`❌ ข้อผิดพลาดในการบันทึก: ${syncResult.message}.`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Add Single Item Error:', error);
+                showToast('❌ การเชื่อมต่อล้มเหลว (POST). กรุณาตรวจสอบ Apps Script URL', 'error');
+            } finally {
                 submitBtn.disabled = false;
                 spinner.classList.add('hidden');
-                return;
-            }
-
-            const withdrawnItems = [];
-            const failedWithdrawals = [];
-            
-            let itemsToSync = [];
-            
-            snList.forEach(sn => {
-                const itemIndex = inventory.findIndex(i => i.SN === sn);
-                if (itemIndex > -1) {
-                    const item = inventory[itemIndex];
-                    if (item.Status === 'Available') {
-                        // ดำเนินการเบิก
-                        inventory[itemIndex].Status = 'Withdrawn';
-                        inventory[itemIndex].WithdrawDate = withdrawDate;
-                        inventory[itemIndex].Technician = technicianName;
-                        withdrawnItems.push(sn);
-                        
-                        // เตรียมข้อมูลสำหรับซิงค์ 
-                        itemsToSync.push({ 
-                            SN: sn, 
-                            Technician: technicianName, 
-                            WithdrawDate: withdrawDate
-                        });
-                    } else {
-                        failedWithdrawals.push(`${sn} (ถูกเบิกแล้ว)`);
-                    }
-                } else {
-                    failedWithdrawals.push(`${sn} (ไม่พบในคลัง)`);
-                }
-            });
-
-            if (withdrawnItems.length > 0) {
-                saveInventory();
-                clearWithdrawForm();
-                showToast(`✅ เบิกจ่ายสำเร็จ ${withdrawnItems.length} รายการ`, 'success');
-                
-                // ส่งข้อมูลไป Apps Script
-                if (settings.webAppUrl) {
-                    await fetchData('withdraw', itemsToSync); 
-                }
-            }
-
-            if (failedWithdrawals.length > 0) {
-                 showToast(`⚠️ เบิกจ่ายไม่สำเร็จ ${failedWithdrawals.length} รายการ: ${failedWithdrawals.slice(0, 3).join(', ')}...`, 'error');
-            }
-            
-            if (withdrawnItems.length === 0 && failedWithdrawals.length > 0) {
-                 showToast('❌ ไม่มีการเบิกจ่ายสำเร็จเลย', 'error');
-            }
-
-            submitBtn.disabled = false;
-            spinner.classList.add('hidden');
-        }
-
-        // =============================================================
-        // 8. หน้า Inventory (รายการสินค้า)
-        // =============================================================
-
-        function filterInventory() {
-            const filterText = document.getElementById('searchSN').value.toUpperCase();
-            const statusFilter = document.getElementById('statusFilter').value;
-            
-            let filtered = inventory.filter(item => {
-                const matchesSN = item.SN.toUpperCase().includes(filterText) || 
-                                  item.Category.toUpperCase().includes(filterText);
-                const matchesStatus = statusFilter === '' || item.Status === statusFilter;
-                return matchesSN && matchesStatus;
-            });
-            
-            // เรียงตาม SN
-            filtered.sort((a, b) => a.SN.localeCompare(b.SN));
-
-            currentInventoryPage = 1; // รีเซ็ตหน้าเมื่อมีการฟิลเตอร์
-            updateInventoryDisplay(filtered);
-        }
-
-        function updateInventoryDisplay(data = null) {
-            const tableBody = document.getElementById('inventoryTable');
-            const paginationContainer = document.getElementById('inventoryPagination');
-            const filteredData = data || inventory;
-            
-            tableBody.innerHTML = '';
-            paginationContainer.innerHTML = '';
-            
-            if (filteredData.length === 0) {
-                tableBody.innerHTML = `<tr class="text-center"><td colspan="7" class="py-4 text-gray-500">ไม่พบรายการสินค้าที่ตรงกับเงื่อนไข</td></tr>`;
-                return;
-            }
-
-            const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
-            const startIndex = (currentInventoryPage - 1) * ITEMS_PER_PAGE;
-            const endIndex = startIndex + ITEMS_PER_PAGE;
-            const pageItems = filteredData.slice(startIndex, endIndex);
-
-            pageItems.forEach(item => {
-                const row = tableBody.insertRow();
-                const statusColor = item.Status === 'Available' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800';
-                
-                row.className = 'border-b border-gray-100 hover:bg-gray-50';
-                row.innerHTML = `
-                    <td class="px-4 py-3 text-sm font-medium text-gray-800">${item.SN}</td>
-                    <td class="px-4 py-3 text-sm text-gray-600">${item.Category}</td>
-                    <td class="px-4 py-3 text-xs text-gray-500">${formatDate(item.ReceiveDate)}</td>
-                    <td class="px-4 py-3 text-xs">
-                        <span class="px-2 py-1 rounded-full font-semibold ${statusColor}">
-                            ${item.Status === 'Available' ? 'คงเหลือ' : 'เบิกแล้ว'}
-                        </span>
-                    </td>
-                    <td class="px-4 py-3 text-sm text-gray-600">${item.Technician || '-'}</td>
-                    <td class="px-4 py-3 text-xs text-gray-500">${formatDate(item.WithdrawDate || '-')}</td>
-                    <td class="px-4 py-3 text-center">
-                        <button onclick="showEditItemModal('${item.SN}')" title="แก้ไข" class="text-blue-600 hover:text-blue-800 mr-2"><i class="fas fa-edit"></i></button>
-                        <button onclick="deleteItem('${item.SN}')" title="ลบ" class="text-red-600 hover:text-red-800"><i class="fas fa-trash-alt"></i></button>
-                    </td>
-                `;
-            });
-            
-            // สร้าง Pagination
-            if (totalPages > 1) {
-                for (let i = 1; i <= totalPages; i++) {
-                    const button = document.createElement('button');
-                    button.textContent = i;
-                    button.className = `px-3 py-1 mx-1 rounded-lg text-sm font-medium transition-colors ${
-                        i === currentInventoryPage 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`;
-                    button.onclick = () => {
-                        currentInventoryPage = i;
-                        updateInventoryDisplay(filteredData);
-                    };
-                    paginationContainer.appendChild(button);
-                }
             }
         }
-        
-        function formatDate(dateString) {
-            if (!dateString || dateString === '-') return '-';
-            try {
-                const date = new Date(dateString + 'T00:00:00'); // ป้องกัน Timezone Offset
-                return date.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            } catch (e) {
-                return dateString;
-            }
-        }
-        
+
         function showEditItemModal(sn) {
-            const item = inventory.find(i => i.SN === sn);
+            const item = inventory.find(i => i.serialNumber === sn);
             if (!item) {
-                showToast(`❌ ไม่พบรายการ SN: ${sn}`, 'error');
+                showToast(`❌ ไม่พบ Serial Number ${sn}`, 'error');
                 return;
             }
+
+            document.getElementById('editSN').value = item.serialNumber;
+            document.getElementById('editTechnician').value = item.technician || '';
             
-            document.getElementById('editSN').value = item.SN;
-            document.getElementById('editTechnician').value = item.Technician || '';
-            
-            // Render category buttons ใน Modal แก้ไข
-            renderCategoryButtons('editCategorySelection', 'editSelectedCategory', item.Category);
-            
+            // Render category buttons for edit modal
+            renderCategoryButtons('edit');
+            selectCategory(item.category, 'editSelectedCategory', 'editCategorySelection');
+
             document.getElementById('editItemModal').classList.remove('hidden');
         }
 
         function hideEditItemModal() {
             document.getElementById('editItemModal').classList.add('hidden');
         }
-        
+
         async function saveEditItem(event) {
             event.preventDefault();
             
+            const sn = document.getElementById('editSN').value.trim();
+            const category = document.getElementById('editSelectedCategory').value;
+            const technician = document.getElementById('editTechnician').value.trim();
             const submitBtn = document.getElementById('editSubmitBtn');
             const spinner = document.getElementById('editSpinner');
+
+            if (!sn || !category) {
+                showToast('❌ ข้อมูลไม่ครบถ้วน', 'error');
+                return;
+            }
+            
             submitBtn.disabled = true;
             spinner.classList.remove('hidden');
 
-            const sn = document.getElementById('editSN').value;
-            const newCategory = document.getElementById('editSelectedCategory').value;
-            const newTechnician = document.getElementById('editTechnician').value.trim();
-            
-            const itemIndex = inventory.findIndex(i => i.SN === sn);
+            const itemToEdit = {
+                serialNumber: sn,
+                category: category,
+                technician: technician 
+            };
 
-            if (itemIndex > -1) {
-                const oldItem = inventory[itemIndex];
+            try {
+                // 1. Sync Data to Google Sheets
+                const syncResult = await sendToGoogleSheets('editItem', [itemToEdit]);
 
-                // อัพเดทข้อมูลใน Local Inventory
-                inventory[itemIndex].Category = newCategory;
-                
-                // อัพเดทผู้เบิกและสถานะตามข้อมูลที่ส่งมา (ถ้ามีการแก้ไขผู้เบิกในรายการที่เบิกแล้ว)
-                if (oldItem.Status === 'Withdrawn') {
-                    inventory[itemIndex].Technician = newTechnician;
-                } else if (newTechnician && oldItem.Status === 'Available') {
-                    // หากใส่ชื่อผู้เบิกในรายการที่ยังไม่เบิก จะถือเป็นการเปลี่ยนสถานะเป็น Withdrawn ทันที
-                    inventory[itemIndex].Status = 'Withdrawn';
-                    inventory[itemIndex].Technician = newTechnician;
-                    inventory[itemIndex].WithdrawDate = updateDateTime();
-                    showToast(`⚠️ ระบบเปลี่ยนสถานะเป็นเบิกแล้วโดยอัตโนมัติ`, 'warning');
-                } else if (!newTechnician && oldItem.Status === 'Withdrawn') {
-                    // หากลบชื่อผู้เบิกออกจากรายการที่เบิกแล้ว ให้เปลี่ยนสถานะกลับเป็น Available
-                    inventory[itemIndex].Status = 'Available';
-                    inventory[itemIndex].Technician = '';
-                    inventory[itemIndex].WithdrawDate = '';
-                    showToast(`⚠️ ระบบเปลี่ยนสถานะเป็นคงเหลือ (Available)`, 'warning');
-                }
-
-                saveInventory();
-                hideEditItemModal();
-                showToast(`✅ แก้ไขรายการ SN: ${sn} สำเร็จ`, 'success');
-                
-                // ส่งข้อมูลไป Apps Script
-                if (settings.webAppUrl) {
-                    await fetchData('edit', inventory[itemIndex]); 
-                }
-                
-            } else {
-                showToast(`❌ ข้อผิดพลาด: ไม่พบรายการ SN: ${sn}`, 'error');
-            }
-            
-            submitBtn.disabled = false;
-            spinner.classList.add('hidden');
-        }
-
-        function deleteItem(sn) {
-            if (confirm(`คุณต้องการลบรายการ SN: ${sn} ออกจากคลังสินค้าจริงหรือไม่?`)) {
-                const initialLength = inventory.length;
-                inventory = inventory.filter(item => item.SN !== sn);
-                
-                if (inventory.length < initialLength) {
-                    saveInventory();
-                    showToast(`✅ ลบรายการ SN: ${sn} สำเร็จ`, 'success');
-                    
-                    // ส่งข้อมูลไป Apps Script
-                    if (settings.webAppUrl) {
-                        fetchData('delete', { SN: sn }); 
+                if (syncResult.success) {
+                    // 2. Update Local Inventory on successful sync
+                    const index = inventory.findIndex(i => i.serialNumber === sn);
+                    if (index !== -1) {
+                        inventory[index].category = category;
+                        inventory[index].technician = technician;
                     }
+                    saveInventory(); 
+                    hideEditItemModal();
+                    showToast(syncResult.message, 'success');
                 } else {
-                    showToast(`❌ ไม่พบรายการ SN: ${sn} ที่จะลบ`, 'error');
+                    showToast(`❌ ข้อผิดพลาดในการบันทึก: ${syncResult.message}.`, 'error');
                 }
+
+            } catch (error) {
+                console.error('Edit Item Error:', error);
+                showToast('❌ การเชื่อมต่อล้มเหลว (POST). กรุณาตรวจสอบ Apps Script URL', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                spinner.classList.add('hidden');
             }
         }
 
+        function confirmDeleteItem(sn) {
+            if (confirm(`คุณต้องการลบรายการ Serial Number: ${sn} ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้!`)) {
+                deleteItem(sn);
+            }
+        }
+
+        async function deleteItem(sn) {
+            const itemToDelete = { serialNumber: sn };
+            
+            try {
+                // 1. Sync Data to Google Sheets
+                const syncResult = await sendToGoogleSheets('deleteItem', [itemToDelete]);
+
+                if (syncResult.success) {
+                    // 2. Update Local Inventory on successful sync
+                    inventory = inventory.filter(item => item.serialNumber !== sn);
+                    saveInventory(); 
+                    showToast(syncResult.message, 'success');
+                } else {
+                    showToast(`❌ ข้อผิดพลาดในการลบ: ${syncResult.message}.`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Delete Item Error:', error);
+                showToast('❌ การเชื่อมต่อล้มเหลว (POST). กรุณาตรวจสอบ Apps Script URL', 'error');
+            }
+        }
 
         // =============================================================
-        // 9. หน้า Settings (ตั้งค่า)
+        // 6. ฟังก์ชันการเชื่อมต่อ Google Sheets (Apps Script)
+        // =============================================================
+        
+        async function sendToGoogleSheets(action, payload) {
+            const url = settings.webAppUrl;
+
+            if (!url || url === DEFAULT_WEB_APP_URL) {
+                showToast('❌ กรุณาตั้งค่า Apps Script URL ที่หน้า "ตั้งค่า"', 'error');
+                return { success: false, message: 'Apps Script URL not set.' };
+            }
+
+            const data = new URLSearchParams();
+            data.append('action', action);
+            data.append('data', JSON.stringify(payload));
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: data.toString()
+                });
+
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    return { success: true, message: result.message };
+                } else {
+                    return { success: false, message: result.message };
+                }
+            } catch (error) {
+                console.error(`Error during ${action} sync:`, error);
+                return { success: false, message: `Network/Server error: ${error.message}` };
+            }
+        }
+
+        // =============================================================
+        // 7. ฟังก์ชันการตั้งค่า (Settings)
         // =============================================================
 
         function saveWebAppUrl() {
-            const url = document.getElementById('webAppUrl').value.trim();
-            if (url) {
-                settings.webAppUrl = url;
+            const newUrl = document.getElementById('webAppUrl').value.trim();
+            if (newUrl) {
+                settings.webAppUrl = newUrl;
                 localStorage.setItem('storeSettings', JSON.stringify(settings));
-                updateConnectionStatus('active', '✅ บันทึก URL Apps Script สำเร็จ');
-                showToast('💾 บันทึกการตั้งค่าสำเร็จ', 'success');
+                updateConnectionStatus('active', '✅ บันทึก URL สำเร็จ');
+                showToast('✅ บันทึก URL Apps Script แล้ว', 'success');
+                initializeDataFromSheets(); // โหลดข้อมูลใหม่อีกครั้ง
             } else {
-                settings.webAppUrl = '';
-                localStorage.setItem('storeSettings', JSON.stringify(settings));
-                updateConnectionStatus('inactive', '⚠️ ล้าง URL Apps Script แล้ว');
-                showToast('⚠️ กรุณากรอก URL ที่ถูกต้อง', 'warning');
+                showToast('❌ กรุณาใส่ URL Apps Script', 'error');
             }
         }
 
         async function testGoogleSheetsConnection() {
-            if (!settings.webAppUrl) {
-                showToast('❌ กรุณาบันทึก URL ก่อนทำการทดสอบ', 'error');
-                updateConnectionStatus('inactive', '⚠️ ยังไม่ได้ตั้งค่า URL Apps Script');
+            const url = settings.webAppUrl;
+
+            if (!url || url === DEFAULT_WEB_APP_URL) {
+                showToast('❌ กรุณาบันทึก URL Apps Script ก่อนทำการทดสอบ', 'error');
                 return;
             }
-            
-            updateConnectionStatus('info', '⌛ กำลังทดสอบการเชื่อมต่อ...');
-            
-            const testPayload = { message: 'TEST_CONNECTION' };
 
+            updateConnectionStatus('testing', '⏳ กำลังทดสอบการเชื่อมต่อ...');
+
+            const testPayload = [{ testKey: 'TestValue' }];
+            
             try {
-                const response = await fetch(settings.webAppUrl, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'test', data: JSON.stringify(testPayload) }).toString()
-                });
-
-                const result = await response.json();
-
-                if (response.ok && result.status === 'success' && result.message === 'Test connection successful!') {
-                    updateConnectionStatus('test-success', '🎉 การเชื่อมต่อสำเร็จ!');
-                    showToast('🎉 ทดสอบการเชื่อมต่อ Apps Script สำเร็จ', 'success');
+                const result = await sendToGoogleSheets('TEST', testPayload);
+                
+                if (result.success) {
+                    updateConnectionStatus('test-success', `✅ ทดสอบสำเร็จ! (${result.message})`);
+                    showToast('✅ การเชื่อมต่อกับ Google Sheets สำเร็จ', 'success');
                 } else {
-                    throw new Error(result.message || 'Server returned an unknown error.');
+                    updateConnectionStatus('test-fail', `❌ ทดสอบล้มเหลว: ${result.message}`);
+                    showToast(`❌ การเชื่อมต่อล้มเหลว: ${result.message}`, 'error');
                 }
             } catch (error) {
-                console.error('Connection Test Error:', error);
-                updateConnectionStatus('test-fail', `❌ การเชื่อมต่อล้มเหลว: ${error.message}`);
-                showToast('🚨 ทดสอบล้มเหลว (โปรดตรวจสอบ URL และการ Deploy)', 'error');
+                updateConnectionStatus('test-fail', '❌ ทดสอบล้มเหลว: ไม่สามารถเชื่อมต่อได้');
+                showToast('❌ การเชื่อมต่อล้มเหลว: โปรดตรวจสอบ URL และการ Deploy', 'error');
             }
         }
 
         function exportToCSV() {
             if (inventory.length === 0) {
-                 showToast('⚠️ ไม่มีข้อมูลให้ส่งออก', 'warning');
-                 return;
+                showToast('❌ ไม่มีข้อมูลในคลังสินค้า', 'warning');
+                return;
             }
             
-            const header = ["Serial Number", "หมวดหมู่", "สถานะ", "วันที่รับเข้า", "ผู้เบิก (ID พนักงาน)", "วันที่เบิก"];
-            const csvRows = [];
-            csvRows.push(header.join(','));
+            const headers = ["Serial Number", "หมวดหมู่", "วันที่รับเข้า", "สถานะ", "ผู้เบิก (ID พนักงาน)", "วันที่เบิก"];
+            const csvData = inventory.map(item => [
+                item.serialNumber,
+                item.category,
+                item.dateReceived,
+                item.status,
+                item.technician,
+                item.dateWithdrawn
+            ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(',')); // escape quotes
 
-            inventory.forEach(item => {
-                const values = [
-                    `"${item.SN}"`, // ใส่ quotes เผื่อมี comma ใน SN
-                    `"${item.Category}"`,
-                    `"${item.Status === 'Available' ? 'คงเหลือ' : 'เบิกแล้ว'}"`,
-                    `"${item.ReceiveDate}"`,
-                    `"${item.Technician || ''}"`,
-                    `"${item.WithdrawDate || ''}"`
-                ];
-                csvRows.push(values.join(','));
-            });
-
-            const csvString = csvRows.join('\n');
-            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const csvContent = [headers.join(','), ...csvData].join('\n');
+            const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Thai characters
             const url = URL.createObjectURL(blob);
+            
             const a = document.createElement('a');
-            a.setAttribute('href', url);
-            a.setAttribute('download', 'inventory_report_' + new Date().toISOString().split('T')[0] + '.csv');
-            a.style.display = 'none';
+            a.href = url;
+            a.download = `store_inventory_export_${new Date().toISOString().split('T')[0]}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showToast('📊 ส่งออกข้อมูล CSV สำเร็จ', 'success');
+            showToast('✅ ส่งออกข้อมูลเป็น CSV สำเร็จ', 'success');
         }
 
         function backupData() {
-            const data = {
+            const backup = {
+                timestamp: new Date().toISOString(),
                 inventory: inventory,
                 categories: categories,
                 settings: settings
             };
-            
-            const jsonString = JSON.stringify(data, null, 2);
+            const jsonString = JSON.stringify(backup, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
+            
             const a = document.createElement('a');
-            a.setAttribute('href', url);
-            a.setAttribute('download', 'store_manager_backup_' + new Date().toISOString().split('T')[0] + '.json');
-            a.style.display = 'none';
+            a.href = url;
+            a.download = `store_manager_backup_${new Date().toISOString().split('T')[0]}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showToast('💾 สำรองข้อมูล (JSON) สำเร็จ', 'success');
+            showToast('✅ สำรองข้อมูลเป็น JSON สำเร็จ', 'success');
         }
 
         function clearAllData() {
-            if (confirm("⚠️ คำเตือน: คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลทั้งหมดในคลังสินค้าและหมวดหมู่ (รวมถึง Apps Script URL)? การกระทำนี้ไม่สามารถยกเลิกได้!")) {
-                inventory = [];
-                categories = []; // <--- แก้ไขแล้ว
-                settings = { webAppUrl: '' };
-                
+            if (confirm('⚠️ คำเตือน! การดำเนินการนี้จะล้างข้อมูลสินค้าทั้งหมดและหมวดหมู่ใน Local Storage ของเบราว์เซอร์นี้ (ข้อมูลใน Google Sheets จะยังอยู่) คุณแน่ใจหรือไม่?')) {
                 localStorage.removeItem('storeInventory');
                 localStorage.removeItem('storeCategories');
-                localStorage.removeItem('storeSettings');
-                
-                loadSettings();
+                inventory = [];
+                categories = [];
+                saveInventory(); // อัปเดตการแสดงผล
+                saveCategories(); // อัปเดตการแสดงผล
+                showToast('🗑️ ล้างข้อมูลใน Local Storage สำเร็จ', 'success');
                 showPage('dashboard');
-                clearReceiveForm();
-                clearWithdrawForm();
-                updateAllDisplays();
-                showToast('🗑️ ล้างข้อมูลทั้งหมดสำเร็จแล้ว', 'success');
             }
         }
 
         function printReport() {
-            // สั่งให้แสดงหน้า Inventory ก่อนพิมพ์
-            showPage('inventory');
-            setTimeout(() => {
-                window.print();
-            }, 100); 
+            // สั่งให้พิมพ์หน้าต่างปัจจุบัน
+            window.print();
         }
 
     </script>
